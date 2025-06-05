@@ -1,0 +1,524 @@
+R.version()
+
+install.packages(glatos)
+install.packages("rgdal")
+library("rgeos")
+
+library(ggplot2)
+library(beepr)
+library(dplyr)
+library(sp)
+library(rgdal)
+library(data.table)
+library(sf)
+library(raster)
+library(gganimate)
+library(PROJ)
+library(geos)
+#library(rgdal)  
+library(devtools)
+library(remotes)
+####progress bar####
+library(progress)
+library(gdalUtilities)
+library(glatos)
+library(remotes)
+
+bubble
+rudd_telemdetectionsHHall
+setwd("C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/")
+rudd <- read.csv("rudd_telemdetectionsHHall.csv")
+#detections <- readRDS("C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/HH_detections_clipped_filtered_2015-2023_good.rds")
+
+summarized_df <- rudd %>% 
+  group_by(transmitter_id) %>%
+  slice(1) %>%
+  ungroup()
+
+selected_df <- summarized_df[c("transmitter_id", "notes")]
+
+#rudd<-detections %>% filter(common_name_e=="Rudd")
+
+#can use this file from now on so dont have to load the entire thing in 
+#write.csv(rudd, "rudd_telemdetectionsHHall.csv")
+
+###need to convert to lat long from UTMS or points
+shorelinemap <- readOGR(dsn = "C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/LakeOntShoreline_MajorWaters.shp", 
+                        layer = "LakeOntShoreline_MajorWaters")
+
+plot(shorelinemap)
+
+shorelinemap1 <- st_as_sf(shorelinemap)
+
+map_NAD83 <- st_transform(shorelinemap1, crs = "+proj=longlat +datum=NAD83")
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+lakes <- st_as_sf(map_NAD83)
+plot(lakes)
+tags<-unique(rudd$transmitter_id)
+
+
+##choose great lakes shoreline - best detailed shapefile I have found for HH details
+shorelinemap <- st_read("LakeOntShoreline_MajorWaters.shp")
+plot(shorelinemap)
+
+###need to convert to lat long from UTMS or points
+target_crs <- st_crs("+proj=longlat +datum=NAD83")
+
+# Transform the shorelinemap object to the NAD83 CRS
+map_NAD83 <- st_transform(shorelinemap, target_crs)
+
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+#map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+lakes <- st_as_sf(map_NAD83)
+
+tags<-unique(rudd$transmitter_id)
+
+###pull out spawning season 
+#march 31 to June 15th timeline 
+
+##########
+shorelinemap_sf <- st_as_sf(shorelinemap)
+
+# Define the target CRS
+target_crs <- st_crs("+proj=longlat +datum=NAD83")
+
+# Transform the shorelinemap_sf object to the NAD83 CRS
+map_NAD83 <- st_transform(shorelinemap_sf, target_crs)
+
+##create a subfolder for the spatial plots
+dir.create(file.path("C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/Individual Plots/QAQC/Rudd/HH_BubblePlots/"), recursive = TRUE)
+
+
+rudd$detection_timestamp_utc <- as.POSIXct(rudd$detection_timestamp_utc)
+rudd_9163<-filter()
+#this works good 
+#loop to go through all fish
+for (i in 1:length(tags)){
+  filename = paste0(tags[i])
+  temp <- subset(rudd, rudd$transmitter_id == paste0(tags[i]))
+  
+  
+  ###this is where you can break it up by time intervals if you wish and add a loop within the loop to go thru weekly intervals  
+  plot(shorelinemap)
+  
+  ##may want to change save location to a file for that individual
+  ###save the map using out_file (rejigged this to include Lake Erie detections but shape file isn't correct. Just be aware)
+  detection_bubble_plot(temp, location_col= "station",map=shorelinemap , 
+                        background_ylim = c(43.25, 43.30), background_xlim = c(-79.95, -79.85) , 
+                        out_file=paste0("./Individual Plots/QAQC/Rudd/HH_Bubbleplots/", temp$common_name_e[1],'-', filename, "_Bubbleplot.png"))
+  
+}
+
+beep(5)
+detection
+unique(rudd$utc_release_date_time)
+
+
+for (temp in unique(rudd$transmitter_id)) {
+  # Compute summary statistics for each transmitter
+  det_summ <- compute_detection_summary(rudd, transmitter_id = temp)
+  
+  # Check if det_summ is not NA
+  if (!is.na(det_summ)) {
+    # Plot detection bubble plot if det_summ is not NA
+    detection_bubble_plot(temp, location_col= "station", map=shorelinemap, 
+                          background_ylim = c(43.25, 43.30), background_xlim = c(-79.95, -79.85),
+                          out_file = paste0("./Individual Plots/QAQC/Rudd/HH_Bubbleplots/", temp$common_name_e[1], '-', filename, "_Bubbleplot.png"))
+  } else {
+    # Print a message or take any other appropriate action if det_summ is NA
+    print(paste("Summary statistics for transmitter", temp, "are not available. Skipping plot."))
+  }
+}
+
+
+###same loop but we will pull out spring rudd only 
+rudd$detection_timestampe_utc <- as.POSIXct(rudd$detection_timestampe_utc, tz = "EDT")
+springrudd2022<-rudd[rudd$detection_timestamp_utc >= "2022-03-31" & rudd$detection_timestamp_utc <= "2022-06-15",]
+springrudd2023<-rudd[rudd$detection_timestamp_utc >= "2023-03-31" & rudd$detection_timestamp_utc <= "2023-06-15",]
+springrudd2223<-rbind(springrudd2022, springrudd2023)
+
+rudd9163<-
+
+locations_summaryspring<-summarize_detections(det=springrudd2223, summ_type = 'location')
+
+unique(springrudd2022$transmitter_id)
+
+for (i in 1:length(tags)){
+  filename = paste0(tags[i])
+  temp <- subset(springrudd2022, springrudd2022$transmitter_id == paste0(tags[i]))
+  
+  
+  ###this is where you can break it up by time intervals if you wish and add a loop within the loop to go thru weekly intervals  
+  
+  
+  ##may want to change save location to a file for that individual
+  ###save the map using out_file (rejigged this to include Lake Erie detections but shape file isn't correct. Just be aware)
+  detection_bubble_plot(temp, location_col= "station",map=shorelinemap , 
+                        background_ylim = c(43.22, 43.35), background_xlim = c(-79.95, -79.75) , 
+                        out_file=paste0("./Individual Plots/QAQC/Rudd/HH_Bubbleplots/", temp$common_name_e[1],'-', filename, "_Bubbleplot.png"))
+  
+}
+
+beep(5)
+
+unique(springrudd2223$transmitter_id)
+Rudd9156_2022  <- springrudd2022[springrudd2022$transmitter_id == "9156", ]
+
+Rudd9156$detection_timestamp_utc
+
+detection_bubble_plot(Rudd9156_2022, location_col = "station", map = shorelinemap, summ_type='locations',
+                      background_ylim = c(43.25, 43.30), background_xlim = c(-79.94, -79.85))
+                       
+ Rudd9155_2023  <- springrudd2023[springrudd2023$transmitter_id == "9155", ]
+unique
+ 
+Rudd9156$detection_timestamp_utc
+detection_bubble_plot(Rudd9156_2023, location_col = "station", map = shorelinemap, 
+                      background_ylim = c(43.25, 43.30), background_xlim = c(-79.94, -79.85))
+                                             
+                 
+ Rudd9155  <- rudd[rudd$transmitter_id == "9155", ]
+Rudd9155_summarized<-summarize_detections(det=Rudd9155, summ_type = 'location')
+  det_events_rudd9155 <- detection_events(Rudd9155, time_sep=43200)           
+
+  
+
+  
+
+#####################################################
+### animations using locations
+
+#detection data from before
+head(rudd)
+
+# make sequential frames and animation
+# make sure ffmpeg is installed if argument \code{animate = TRUE}
+# If you have not added path to 'ffmpeg.exe' to your Windows PATH 
+# environment variable then you'll need to do that  
+# or set path to 'ffmpeg.exe' using the 'ffmpeg' input argument
+
+# call with defaults; linear interpolation
+###interpolation time stamp is default 1 day or 86400 sec. I've changed it to 4 times a day ... changed back to 1 day for now
+##interpolate path on the whole dataset all at once - subset for species AFTER - else it creates a 'seizure' animation
+
+  
+  pos <- interpolate_path(rudd, int_time_stamp=86400)
+
+head(pos)
+#make each individual a diff colour
+n<-unique(pos$animal_id)
+col.rainbow<-rainbow(length(n))
+
+pos3<-data.frame()
+
+for (i in 1:length(n)){
+  
+  pos2<-pos[pos$animal_id==n[i],]
+  pos2$Colour<-col.rainbow[i]
+  
+  
+  pos3<-rbind(pos3,pos2)
+  
+}
+
+pos<-pos3
+unique(pos$animal_id)
+
+##shows a full coloured point if a true detection and not interpolation
+pos$fill<-ifelse(pos$record_type =="detection", 16,1)
+
+# convert pos2 to data.table
+setDT(pos)
+
+# extract unique bin_timestamp from the interpolated data
+int <- unique(pos, by = "bin_timestamp")
+
+##need receiver location data
+####load receivers from GLATOS file. This is provided with GLATOS query
+#receivers<-read_glatos_receivers("C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/GLATOS_receiverLocations_20240122_234632.csv")
+
+setDT(GLATOS_receiverLocations_20240122_234632) # convert to data.table object- necessary for sf package
+
+
+recs_sf <- st_as_sf(GLATOS_receiverLocations_20240122_234632, coords = c("deploy_long", "deploy_lat"), crs = 4326) 
+# Add bin_timestamp to receivers, based on deploy/recover timestamps.
+# Removes unnecessary columns in output to simplify
+# This is a data.table non-equi join...
+unique(GLATOS_receiverLocations_20240122_234632$glatos_project)
+
+GLATOS_receiverLocations_20240122_234632[, c("deploy_date_time", "recover_date_time") :=
+                                            lapply(.SD, as.POSIXct, format = "%Y-%m-%d %H:%M:%S"),
+                                          .SDcols = c("deploy_date_time", "recover_date_time")]
+setDT(i)
+i[, bin_timestamp := as.POSIXct(bin_timestamp, origin = "1970-01-01")]
+
+receivers <- GLATOS_receiverLocations_20240122_234632[int, .(deploy_lat = x.deploy_lat,
+                              deploy_long = x.deploy_long,
+                              station = x.station,
+                              deploy_date_time = x.deploy_date_time,
+                              recover_date_time = x.recover_date_time,
+                              bin_timestamp = i.bin_timestamp),
+                       on = .(deploy_date_time <= bin_timestamp,
+                              recover_date_time >= bin_timestamp),
+                       allow.cartesian = TRUE]
+
+myDir <- ("./Individual Plots/QAQC/Rudd/animations")
+
+#just pull out one fish to try the animation with first 
+unique(pos$animal_id)
+
+
+###test
+ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  geom_point(data = GLATOS_receiverLocations_20240122_234632, aes(x = deploy_long, y = deploy_lat), size = 2, color = "orange", inherit.aes = FALSE) +
+  geom_point(data=RUDD9155_pos, aes(x=longitude, y=latitude, group=animal_id, color=record_type, size=record_type), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  scale_color_manual(values=c("red", "blue")) +
+  scale_size_manual(values=c(2,1))
+
+
+###rudd9155 the BIG mover
+unique(pos$animal_id)
+
+RUDD9155_pos<-pos[pos$animal_id=='A69-9006-9155',]
+
+unique(RUDD9155_pos$animal_id)
+###using gganimate                             
+library(gifski)
+library(gapminder)
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9155_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9155_bigmover_rec.gif")
+
+
+
+#####redhill rudd
+
+RUDD9163_pos<-pos[pos$animal_id=='A69-9006-9163',]
+
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9163_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9163_redhill.gif")
+
+
+
+
+
+
+##$#LKO rudd
+RUDD9150_pos<-pos[pos$animal_id=='A69-9006-9150',]
+Rudd9150_pos_detectionsonly<-RUDD9150_pos[RUDD9150_pos$record_type=='detection',]
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=Rudd9150_pos_detectionsonly, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.55), ylim = c(43.22, 43.45), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9150_LKO_detectionsonly.gif")
+
+
+
+###rudd9160
+
+RUDD9160_pos<-pos[pos$animal_id=='A69-9006-9160',]
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9160_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9160.gif")
+
+
+##couple of weird ones 
+RUDD9164_pos<-pos[pos$animal_id=='A69-9006-9164',]
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9164_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9164.gif")
+
+##next one
+RUDD9159_pos<-pos[pos$animal_id=='A69-9006-9159',]
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9164_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9159.gif")
+
+#next one
+RUDD9157_pos<-pos[pos$animal_id=='A69-9006-9157',]
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=RUDD9157_pos, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9157.gif")
+
+
+#########all rudd during the spring spawning window#############
+######spawning window 2022
+pos_spring2022<-pos[pos$bin_timestamp >= "2022-03-31" & pos$bin_timestamp <= "2022-06-30",]
+
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+#  geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+ #            size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=pos_spring2022, aes(x=longitude, y=latitude,
+                           group=animal_id, color=animal_id,
+                           size=record_type), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+  scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+p_anim <- animate(p, nframes = 200, fps = 4,renderer = gifski_renderer())
+
+anim_save("ruddall_HH_spawn2022_longer.gif", animation = p_anim)
+
+
+
+
+
+
+###spawning window 2023
+pos_spring2023<-pos[pos$bin_timestamp >= "2023-03-31" & pos$bin_timestamp <= "2023-06-30",]
+
+
+p<-ggplot(data = lakes) +
+  geom_sf(color = "black", fill = "lightgrey") +
+#  geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+ #            size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=pos_spring2023, aes(x=longitude, y=latitude,
+                           group=animal_id, color=animal_id,
+                           size=record_type), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+  scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+p_anim <- animate(p, nframes = 200, fps = 4,renderer = gifski_renderer())
+
+anim_save("ruddall_HH_spawn2023_longer.gif", animation = p_anim)
+
+
+
+unique(rudd$)

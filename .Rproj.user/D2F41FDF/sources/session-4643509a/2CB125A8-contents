@@ -1,0 +1,17 @@
+# Extract coordinates from the spatial object
+shorelinemap_coords <- st_coordinates(shorelinemap_sf)
+
+# Convert the coordinates to a data frame
+shorelinemap_df <- as.data.frame(shorelinemap_coords)
+
+# Add group and ID columns to maintain the polygon structure
+shorelinemap_df$group <- rep(1:nrow(shorelinemap_sf), each = nrow(shorelinemap_coords) / nrow(shorelinemap_sf))
+
+# Now plot with ggplot2
+CPM_HHmap <- ggplot() +
+  geom_polygon(data = shorelinemap_df, aes(x = X, y = Y, group = group)) +
+  coord_cartesian(xlim = X_limits_CPM_HH, ylim = y_limits_CPM_HH) +
+  theme_minimal()
+
+# Show the plot
+

@@ -1,0 +1,67 @@
+
+library(sf)
+library(ggplot2)
+
+shorelinemap <- readOGR(dsn = "C:/Users/TURNERN/Desktop/HH goldfish/lakeontarionorthshoreline/LakeOntShoreline_MajorWaters.shp", 
+                        layer = "LakeOntShoreline_MajorWaters")
+
+
+shorelinemap <- st_read("LakeOntShoreline_MajorWaters.shp")
+plot(shorelinemap)
+
+map<-fortify(shorelinemap)
+
+
+ggplot() +
+  geom_polygon(data = map, aes(x = long, y = lat, group = group)) +
+  theme_minimal()
+
+###new way with updated R
+
+shorelinemap_sf <- st_as_sf(shorelinemap)
+
+# Plot using ggplot2
+ggplot(data = shorelinemap_sf) +
+  geom_sf() +
+  theme_minimal() +
+  labs(title = "Shoreline Map")
+
+
+# Define the longitude and latitude ranges for the specific area
+
+#entire harbour limits
+x_limits_HH <- c(-79.96, -79.76)  # Define your desired range for x-axis
+y_limits_HH <- c(43.25, 43.32)  # Define your desired range for y-axis
+
+# Plot the shapefile with specified x and y limits
+ggplot() +
+  geom_polygon(data = map, aes(x = long, y = lat, group = group)) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  theme_minimal()
+
+###zoomed in cootes, GC, west endx_limits_HH <- c(-79.96, -79.76)  # Define your desired range for x-axis
+x_limits_westend <- c(-79.93, -79.87)  # Define your desired range for x-axis
+y_limits_westend <- c(43.26, 43.3)  # Define your desired range for y-axis
+
+# Plot the shapefile with specified x and y limits
+ggplot(data = shorelinemap_sf) +
+  geom_sf(fill = "light blue") +
+  coord_sf(xlim = x_limits_westend, ylim = y_limits_westend) +
+  theme_minimal()
+
+##entire harbour 
+x_limits_HHall <- c(-79.90, -79.78)  # Define your desired range for x-axis
+y_limits_HHall <- c(43.265, 43.315)  # Define your desired range for y-axis
+Ham_harb<-ggplot(data = shorelinemap_sf) +
+  geom_sf(fill = "light blue") +
+  coord_sf(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal()
+
+
+
+
+
+####for the rudd project the shapefile will need to be more detailed in cootes and grindstone
+
+#cootes will need the channel in spencer creek added plus old canal channel
+#grindstone will need the ponds added 

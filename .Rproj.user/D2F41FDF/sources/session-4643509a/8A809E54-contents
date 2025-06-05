@@ -1,0 +1,201 @@
+###Goldfish animation codes
+
+library(glatos)
+library(sf)
+library(mapview)
+library(plotly)
+
+detection_events <- 
+  read_glatos_detections("data/detections.csv") %>% 
+  false_detections(tf = 3600) %>% 
+  filter(passed_filter != FALSE) %>% 
+  detection_events(location_col = 'station')
+
+receivers <-
+  read_glatos_receivers("data/deployments.csv")
+
+## Combine detection and reciever datasets into a single combined data frame
+combined_data <- 
+  detection_events %>% 
+  left_join(receivers, by = c("location" = "station")) %>% 
+  filter(first_detection >= deploy_date_time, first_detection <= recover_date_time)
+
+## Plot your combined dataset 
+GFdetections_2022_TP %>% 
+  group_by(station_no, deploy_lat, deploy_long) %>% 
+ # summarise(Num.Det = n()) %>% 
+  st_as_sf(coords = c("deploy_long", "deploy_lat"), crs = 4326) %>% 
+  mapview(zcol = "station_no", cex = "station_no", burst = T, legend = F)
+  
+
+
+##
+
+library(gganimate)
+library(ggmap)
+
+plot_data <-
+  GFdetections_2022 %>% 
+  mutate(timestep = round_date(first_detection, unit = "1 days")) %>% 
+  group_by(timestep, animal_id) %>% 
+  summarise(lon = mean(deploy_long),
+            lat = mean(deploy_lat))
+
+##need to registe: Stadia Maps requires an API key; see `ggmap::register_stadiamaps()`. 
+#skip this for now
+## Lets setup the base map
+base <- 
+  get_stadiamap(
+    bbox = c(left = min(plot_data$lon),
+             bottom = min(plot_data$lat), 
+             right = max(plot_data$lon), 
+             top = max(plot_data$lat)),
+    crop = F, 
+    zoom = 8)
+#######
+
+p<-HHmap +
+  geom_point(data=plot_data, aes(x=lon, y=lat,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  # scale_color_manual(values=c("red", "blue")) +
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+
+#
+
+
+detectionsGF <- detectionsGF %>%
+  mutate(date = as.Date(detection_timestamp_EST))
+
+2020-01-06 00:00:00### animations using locations
+
+GF_1390_zoom <- goldfish1390 %>%
+  filter(detection_timestamp_EST >= as.POSIXct("2023-10-01 00:00:00") & detection_timestamp_EST <= as.POSIXct("2025-07-31 00:00:00"))
+
+
+# make sequential frames and animation
+# make sure ffmpeg is installed if argument \code{animate = TRUE}
+# If you have not added path to 'ffmpeg.exe' to your Windows PATH 
+# environment variable then you'll need to do that  
+# or set path to 'ffmpeg.exe' using the 'ffmpeg' input argument
+
+# call with defaults; linear interpolation
+###interpolation time stamp is default 1 day or 86400 sec. I've changed it to 4 times a day ... changed back to 1 day for now
+##interpolate path on the whole dataset all at once - subset for species AFTER - else it creates a 'seizure' animation
+
+goldfish1390<-filter(detectionsGF1, transmitter_id=="1390")
+ as.data.frame(goldfish1390) 
+ goldfish1390$detection_timestamp_EST <- as.POSIXct(goldfish1390$detection_timestamp_EST)
+detectionsGF <- detectionsGF[!duplicated(detectionsGF$int_time_stamp), ]
+ 
+goldfish1390$detection_timestamp_EST
+goldfish1390<-goldfish1390[goldfish1390$date >= "2022-02-28" & 
+                                                goldfish1390$date <= "2022-06-30",]
+#october 1 2023 until august 2024
+
+pos <- interpolate_path(GF_1390_zoom, int_time_stamp=86400)
+
+head(pos)
+#make each individual a diff colour
+n<-unique(pos$animal_id)
+col.rainbow<-rainbow(length(n))
+
+pos3<-data.frame()
+
+for (i in 1:length(n)){
+  
+  pos2<-pos[pos$animal_id==n[i],]
+  pos2$Colour<-col.rainbow[i]
+  
+  
+  pos3<-rbind(pos3,pos2)
+  
+}
+
+pos<-pos3
+unique(pos$animal_id)
+
+##shows a full coloured point if a true detection and not interpolation
+pos$fill<-ifelse(pos$record_type =="detection", 16,1)
+
+# convert pos2 to data.table
+setDT(pos)
+
+# extract unique bin_timestamp from the interpolated data
+int <- unique(pos, by = "bin_timestamp")
+
+#just pull out one fish to try the animation with first 
+unique(pos$animal_id)
+
+plot(shorelinemap)
+
+
+###test
+pos$bin_timestamp <- as.POSIXct(pos$bin_timestamp, format = "%Y-%m-%d %H:%M:%S")
+
+#zoom in on the time when we are most intrested in i.e wher did it over winter
+
+
+goldfish2 <- HHmap +
+  geom_point(data = pos, aes(x = longitude, y = latitude, size = record_type, color="darkred"), inherit.aes = FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  #scale_color_manual(values = c("red")) +
+  scale_size_manual(values = c(5, 3)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp) +
+  ggtitle('{frame_time}')
+
+#######
+#anim <- animate(goldfish2, fps = 4, nframes = 200, renderer = ffmpeg_renderer(), width = 800, height = 600)
+#anim_save("GF1390_CPM.mp4", animation = anim)
+#any(is.na(pos$bin_timestamp))
+##do two more figures with all the fish 
+#first one is March 15-July 15th 2022 and second will be 2023 data 
+#see if we can see aggregations for spawning 
+#proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("goldfish_1390_cpmclipped.mp4", 
+          animation = goldfish2, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+#######trying to add a colour change to the background of the water that is associated with a change in seasonality
+library(ggplot2)
+library(gganimate)
+
+# Define a function to return colors based on seasons
+
+detectionsGF1$gen_season
+
+season_colors <- c("Winter" = "#ADD8E6",  # Light Blue
+                   "Spring" = "#FFB6C1",  # Light Pink
+                   "Summer" = "#FFFF99",  # Yellow
+                   "Fall" = "#D2B48C")    # Light Brown
+
+
+goldfish1 <- HHmap +
+  # Add a rectangle covering the water body, colored by season
+  geom_rect(aes(xmin = min(longitude), xmax = max(longitude), 
+                ymin = min(latitude), ymax = max(latitude), 
+                fill = gen_season), alpha = 0.3, inherit.aes = FALSE) +  
+  geom_point(data = pos, aes(x = longitude, y = latitude, size = record_type, color="darkred"), inherit.aes = FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  scale_fill_manual(values = season_colors) +  # Use predefined colors for seasons
+  scale_size_manual(values = c(5, 3)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp) +  # Animate by time
+  ggtitle('{frame_time}')
