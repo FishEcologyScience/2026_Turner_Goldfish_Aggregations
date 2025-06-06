@@ -40,11 +40,12 @@ CarrollsBay_with_points_1 <- CarrollsBay +
   theme_minimal()
 
 plot(CarrollsBay_with_points_1)
-#saved the above code right into the github workspace plots folder
 
+#saved the above code right into the github workspace plots folder
 ggsave("plots/CarrollsBay_captures_bubbleplot.png", 
        plot = CarrollsBay_with_points_1,
        width = 12, height = 9, 
        dpi = 600,
        bg = "white")
 
+#############

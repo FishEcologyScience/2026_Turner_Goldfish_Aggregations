@@ -46,7 +46,7 @@ y_limits_HHall <- c(43.265, 43.315)  # Define your desired range for y-axis
 
 #GCzoom in 
 x_limits_GC <- c(-79.891, -79.88)  # Define your desired range for x-axis
-y_limits_GC <- c(43.28, 43.290)  # Define your desired range for y-axis
+y_limits_GC <- c(43.28, 43.291)  # Define your desired range for y-axis
 
 ##HH and lko
 x_limits_lko<- c(-79.90, -77) 

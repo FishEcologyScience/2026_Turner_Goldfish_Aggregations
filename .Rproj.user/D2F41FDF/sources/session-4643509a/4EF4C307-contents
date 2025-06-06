@@ -2,6 +2,7 @@
 
 Aggdata_June52025 <- read_excel("data/raw/Aggdata_June52025.xlsx")
 
+
 #could condense the data down further so its not singular aggregation locations but rather 
 #transect aggregations, ie summarize the total captured/missed per day sampled 
 
@@ -22,6 +23,8 @@ CarrollsBay_with_points <- CarrollsBay +
 #
 plot(CarrollsBay_with_points)
 
+
+
 #additonal layers we can include in the maps
 #should add in a bathy layer then we cna just grab depths right from each point  GIS?
 CarrollsBay_with_points_1 <- CarrollsBay +
@@ -40,11 +43,13 @@ CarrollsBay_with_points_1 <- CarrollsBay +
   theme_minimal()
 
 plot(CarrollsBay_with_points_1)
-#saved the above code right into the github workspace plots folder
 
+#saved the above code right into the github workspace plots folder
 ggsave("plots/CarrollsBay_captures_bubbleplot.png", 
        plot = CarrollsBay_with_points_1,
        width = 12, height = 9, 
        dpi = 600,
        bg = "white")
+
+#############
 
