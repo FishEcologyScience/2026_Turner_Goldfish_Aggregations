@@ -1,0 +1,1034 @@
+#############################
+### QAQC of Hamilton Harbour Telemetry Data from a GLATOS export ##
+## Last update: Feb 2025 (Turner)
+######################## 
+rm(list = ls())
+gc()
+###################
+## Load Packages ##
+###################
+library(pacman)
+p_load(plyr)
+p_load(lubridate)
+p_load(reshape)
+p_load(data.table)
+p_load(splitstackshape)
+library(scales)
+library(gridExtra)
+library(ggpubr)
+#install.packages("remotes")
+library(remotes) 
+##current glatos version is version 0.8. ('very-refereshing-lemonade')
+#NOTE: if things aren't loading properly, check to see if using latest version of GLATOS.
+# Install 'glatos' in R:
+install.packages('glatos', repos = c('https://ocean-tracking-network.r-universe.dev', 'https://cloud.r-project.org'))
+library(glatos)
+library(sf)
+library(sp)
+library(rgeos)
+library(raster)
+library(ggplot2)
+library(rgdal)
+library(dplyr)
+library(readxl)
+library(beepr)
+library(grDevices)
+library(data.table)
+library(readr)
+
+##increase the memory limit so R doesn't crash (as often)
+#memory.limit(8400000000) ## a Windows specific command
+#no longer supported
+#################
+## Data Import ##
+#################
+setwd("C:/Users/TURNERN/Documents/Telem2025")
+
+
+###get the most recent telemetry export from GLATOS
+
+##as of 2024 -> detection file is: HAMLO_detectionsWithLocs_20240123_154602.csv
+##as of 2024 -> tag specification file is: HH_Fish_Workbook_Jan2024.csv
+
+getwd()
+
+###to call in data that's located in different folder use this. "./../new folders/file.csv" - to use current path use ./ and 
+#every folder level you want to go up use /../ and then put in name of new folders for the new path. This way I can organize files
+#into data vs analyses folders. eg. detections<-read_glatos_detections("./../Data/Telemetry/HAMLO_detectionsWithLocs_20210519_172552.csv")
+#detections<-read_glatos_detections("./Data/HAMLO_detectionsWithLocs_20240123_154602.csv")
+#beep(5) # run together with above lines => produces a sound once the above function is done
+        ## so you can work on other things while you wait.
+
+####there are some errors with missing info in the workbook but for now so this is a workaround - update as things get fixed. 
+##to get depth values load up the HH fish workboook with tag specs
+
+#how to load in a zipped file instead
+#to load in a specific file from the zip file you get from GLATOS just direct the console to it and change the .csv file name to load in whatever
+#data you want from the zipped file
+
+setwd("C:/Users/TURNERN/Documents/Telem2025")
+
+#use this code to load in from a zipped file (do not have to unzip it just point to it plus the file witihn you want to load in here)
+detections <- fread(cmd = "unzip -p HAMLO_20250110.zip HAMLO_detectionsWithLocs_20250110_144040.csv")
+#rename to detections
+unique(detections$transmitter_codespace)
+head(detections)
+Ruddtest<-detections%>%filter(common_name_e=="Rudd")
+unique(Ruddtest$transmitter_id)
+
+ID509<-detections %>%filter(transmitter_id==509)
+
+tagspec <-read.csv("C:/Users/TURNERN/Documents/Telem2025/HH_Fish_Workbook_Jun2024.csv",
+                   stringsAsFactors = FALSE,
+                   strip.white = TRUE,
+                   na.strings = c("NA","","-") )
+
+
+tagspec$transmitter_id<-as.character(tagspec$TAG_ID_CODE)
+##due to temperature and depth, added SN and sensor type to the info to bring to detection dataset
+fish.info <- dplyr::select(tagspec,transmitter_id,Tag.SN,SensorType,Slope,Intercept)
+fish.info$Slope<-as.numeric(fish.info$Slope)
+fish.info$Intercept<-as.numeric(fish.info$Intercept)
+
+##remove NAs - only fish with slopes/intercepts
+fish.info<-fish.info[!is.na(fish.info$Slope),]
+
+#join the detections and depth info datasets
+fish.info$transmitter_id<-as.numeric(fish.info$transmitter_id)
+detections<-left_join(detections,fish.info, by = c("transmitter_id"))
+beep(5)
+## Get Final Sensor Value, in this case 'Depth' and 'temperature' 
+detections$Sensor.Val <- (detections$sensor_value*detections$Slope)+detections$Intercept 
+beep(5)
+
+### check to see if all fish with sensor data are getting a corrected sensor value. It should have the same # of rows in deep and deep2
+#deep<-detections %>% filter(!is.na(sensor_value))
+#deep2<-detections %>% filter(!is.na(Sensor.Val))
+
+#quick summary of min and max depths by fish species
+depths <- detections %>% group_by(common_name_e, SensorType) %>% summarize(min=min(Sensor.Val,na.rm = TRUE), max=max(Sensor.Val,na.rm = TRUE), ids=n_distinct(transmitter_id))
+
+##with temperature and depth values calculated, we will make the transmitter_id be the SN value to combine location dataset properly for each fish
+#detections$transmitter_id<-detections$Tag.SN
+n_distinct(detections$transmitter_id)
+n_distinct(detections$Tag.SN)
+
+#have 395 transmitterID and 327 tag.sn
+
+
+###individually change transmitter_ids for fish with temp and pressure sensors. It messes up so many other things otherwise. 
+tempfish<-detections %>% group_by(common_name_e,transmitter_id, Tag.SN) %>% filter(SensorType=="T") %>% summarize(n=n())
+unique(tempfish$transmitter_id)
+SNs<-unique(tempfish$Tag.SN)
+
+#for all the pressure and temperature fish its coming up as goldish and rudd only 
+#can we confirm that these are realy the only fish tagged with temp pressure tags?
+#also can we check the new rudd that were tagged in 2024 do they need this fix?
+
+pressurefish<-detections %>% group_by(transmitter_id, Tag.SN,common_name_e, SensorType) %>% filter(Tag.SN %in% SNs)%>% summarize(n=n())
+
+detections$transmitter_id[detections$transmitter_id == 1365] <- 1366
+detections$transmitter_id[detections$transmitter_id == 1367] <- 1368
+detections$transmitter_id[detections$transmitter_id == 1369] <- 1370
+detections$transmitter_id[detections$transmitter_id == 1371] <- 1372
+detections$transmitter_id[detections$transmitter_id == 1373] <- 1374
+detections$transmitter_id[detections$transmitter_id == 1375] <- 1376
+detections$transmitter_id[detections$transmitter_id == 1377] <- 1378
+detections$transmitter_id[detections$transmitter_id == 1379] <- 1380
+detections$transmitter_id[detections$transmitter_id == 1381] <- 1382
+detections$transmitter_id[detections$transmitter_id == 1383] <- 1384
+detections$transmitter_id[detections$transmitter_id == 1385] <- 1386
+detections$transmitter_id[detections$transmitter_id == 1387] <- 1388
+detections$transmitter_id[detections$transmitter_id == 1389] <- 1390
+detections$transmitter_id[detections$transmitter_id == 1391] <- 1392
+detections$transmitter_id[detections$transmitter_id == 1393] <- 1394
+detections$transmitter_id[detections$transmitter_id == 1395] <- 1396
+detections$transmitter_id[detections$transmitter_id == 1397] <- 1398
+detections$transmitter_id[detections$transmitter_id == 1399] <- 1400
+detections$transmitter_id[detections$transmitter_id == 1401] <- 1402
+detections$transmitter_id[detections$transmitter_id == 1403] <- 1404
+
+#verify that transmitter IDs were combined
+pressurefish<-detections %>% group_by(transmitter_id, Tag.SN,common_name_e, SensorType) %>% filter(Tag.SN %in% SNs)%>% summarize(n=n())
+n_distinct((pressurefish$transmitter_id))
+
+### there is a difference since some fish were never provided with a SN or aren't in our fish workbook (e.g., Paul Bzonek's UoT carp)
+n_distinct(detections$transmitter_id)
+n_distinct(detections$Tag.SN)
+########################################################
+###false filter detections
+
+###tf = threshold time. Where the rule of thumb is to omit data when
+###a detection is separated from others of the same tag ID on 
+###a single receiver by 30 times the nominal delay of the transmitter 
+###(e.g., 3600 seconds for tags with a 120 sec nominal delay) - basically removing a random blip of a detection
+### in Hamilton Harbour with such the dense array, false filtering is recommended. 
+
+###determine nominal delay 
+tagspec$nominaldelay<-((tagspec$Max.Delay-tagspec$Min)/2)+tagspec$Min
+nominaldelay<-tagspec %>% group_by(nominaldelay) %>% summarise(n=n())
+mindelay<-tagspec %>% group_by(Min) %>% summarise(n=n())
+fish.info2 <- select(tagspec,transmitter_id,nominaldelay,Min)
+#join the detections and nominal delay info datasets
+fish.info2$transmitter_id<-as.numeric(fish.info2$transmitter_id)
+detections<-left_join(detections,fish.info2, by = c("transmitter_id"))
+
+###assume Min is 130 for fish without info - used 130 as it was the most common Min Delay value 
+detections$Min[is.na(detections$Min)] <- 130
+detections$nominaldelay[is.na(detections$nominaldelay)] <- 200
+unique(detections$nominaldelay)
+
+# Nominal Delay is 200 sec in HH (for most fish)
+##false detection filtered based on correct nominal delay for each fish 
+#30 times the nominal delay
+200*30
+
+delays<-unique(detections$nominaldelay)
+filtered_detections<-data.frame()
+#i=1
+for (i in 1:length(delays)) {
+  
+  temp<-detections %>% filter(nominaldelay==delays[i])
+
+  false=delays[i]*30  
+  
+  filtered_detections_part<-false_detections(det=temp, tf = false, show_plot=TRUE)
+
+  filtered_detections<-bind_rows(filtered_detections,filtered_detections_part)
+  
+}
+
+#confirming loop worked
+#sum(is.na(detections$passed_filter))
+  
+###with potential for tag collisions in HH - use filtered detections
+# remove detections that passed the filter by subsetting.
+### only remove false filtered detections in HAM array only as it can remove true
+#data points in Lake Ontario with the large distances between receivers
+#detections2<-filtered_detections[filtered_detections$passed_filter==1,]
+
+### remove false detections for all dataset. Gets rid of many weird detections in other Great Lakes.Feb 2024
+detections<-filtered_detections[filtered_detections$passed_filter==1,]
+unique(detections$passed_filter)
+
+unique(filtered_detections$glatos_array)
+unique(filtered_detections$passed_filter)
+##if only removing false detections in Hamilton Harbour
+#detectionA<-filtered_detections %>% filter(glatos_array=="HAM" & passed_filter==1)
+#detectionsB<-filtered_detections %>% filter(!glatos_array=="HAM")
+#detectionsAB<- bind_rows(detectionA, detectionsB)
+
+#########################################
+###save in case R crashes due to size of dataset (often happened to me...)
+### This will take a while so run the 'beep' function together with the 'saveRDS' function
+saveRDS(detections, "C:/Users/TURNERN/Documents/Telem2025/detections_filtered_2015-2025.rds")
+#saveRDS(filtered_detections, "./QAQC/detections_filteroption_2015-2024.rds")
+beep(5)
+
+
+#save the hamilton detections only first
+#saveRDS(detectionsAB, "C:/Users/TURNERN/Documents/Telem2025/HH_detections_filtered1_2015-2025.rds")
+#beep(5)
+
+########################################
+#load if starting after false filtering
+detections <-readRDS( "C:/Users/TURNERN/Documents/Telem2025/detections_filtered_2015-2025.rds")
+beep(5)
+#### see if fish are detected within minimal delay (130s) on the same receiver - i.e. being detected again on a receiver 
+## earlier than what is actually possible. If this happens it is not a true detection. 
+
+min(tagspec$Min, na.rm=T)
+
+mindelay<-detections %>% group_by(Min) %>% summarise(n=n_distinct(transmitter_id))
+###most tags had minimal nominal delay of 120s so will use that value
+#most of the tags hav ea minimal nominal delay of 130 seconds (304 vs 25 with 120) - NT
+
+#recalculate min lag column as we removed some values from false filtering. 
+detections<-min_lag(detections)
+beep(5)
+min(detections$min_lag, na.rm=T)
+### based on the min_lag value some detections were not real. 
+
+#set min lag to remove values less than this
+
+lag<-120
+
+### this process needs to be repeated since when a detection that occurred too soon is removed, the minimum lag between 
+#detections of the same individual on the same receiver could still be < the minimal nominal delay 
+#(i.e., a detection could have occurred 5 times after the initial one that were too quick)
+## this will help remove any biases with any position estimates later or detection #s. 
+
+##R can't run dataset this large in one go. So attempting to split it
+tags<-unique(detections$transmitter_id)
+data_filtered<-list()
+pb <- winProgressBar(title = "progress bar", min = 0,
+                     max = length(tags), width = 300)
+  
+
+for (i in 1:length(tags)) {
+  temp<-detections %>% filter(transmitter_id==tags[i])
+  ##use the min delay for the specific tag - before ran it generically
+  lag<-unique(temp$Min)
+  Sys.sleep(0.1)
+  setWinProgressBar(pb, i, title=paste( round(i/length(tags)*100, 0),
+                                        "% done"))
+  #### this will take a whole night to run...prepare yourself (unless my computer is just very slow) 
+  ##to remove the detections that occurred too soon on the same receiver
+  repeat {
+    # do something
+    short<-temp %>% filter(min_lag<lag) ### selects all data with short detections
+    long<-temp %>% filter(!min_lag<lag) ### selects all good data with longer detections
+    no<-temp %>% filter(is.na(min_lag)) ### keeps those with NA min lag in dataset (think this is alright - its if only one detection at a receiver or the last time detected)
+    short2<-short[!duplicated(short[c("station_no","transmitter_id","min_lag")]),] ### of the short detections - removes duplicates - or detections after the first one that is occurring too quickly. 
+    #Note, this is likley not perfect but its still removing detections that are occurring too early so probably is good and I'm overthinking.
+    #It removes those with the same min_lag value at the same station. Mostly due to a glitch at one receiver (station 34) with 8 sec min lags repeating in error. 
+    temp<-bind_rows(long,short2, no)  #### combines dataset with short detections removed
+    # detections2 <- detections2 %>% select(-c(min_lag)) ###removes min lag column - it recalculates over same column name
+    temp <- min_lag(temp) ###recalculates min lag column
+    min(temp$min_lag)
+    # exit if the condition is met
+    if(nrow(temp %>% filter(min_lag<lag))==0) {   ##### if there are any detections with min lag < 120, this keeps repeating
+      break
+    }
+  }
+  data_filtered<-bind_rows(data_filtered,temp)
+  
+}
+beep(5)
+close(pb)
+
+###Jan 2023: started with 44,355,722 detections, ended up with 43,971,395 detections  
+### A total of 1% of detections were removed
+###Feb 2024: started with 52,266,603 detections, ended up with 48,499,420 detections
+### A total of 7.7% of detections were removed. GLATOS indicated an issue with duplication of a vrl file that is slightly off, so we probably encountered that. 
+##note there may be better and faster ways to do this but it works for now. could look into using data.table syntax
+#instead of dplyr
+#Jan 2025: started with 53,817,049 ended with 53405231 
+##save work in case R crashes
+saveRDS(data_filtered, "C:/Users/TURNERN/Documents/Telem2025/detections_filtered1B_2015-2025.rds")
+beep(5)
+
+detections<-data_filtered
+
+############################################################
+##load if done the above already ###
+detections<-readRDS("./detections_filtered1B_2015-2025.rds")
+
+##################################################################
+
+##convert to appropriate time zone for analyses
+detections$detection_timestamp_EST<-as.POSIXct(format(detections$detection_timestamp_utc, tz="America/Toronto",format="%Y-%m-%d %H:%M:%S"))
+detections$detection_timestamp_EST<-force_tz(detections$detection_timestamp_EST,'America/Toronto')
+beep(5)
+###ensure data is in UTC for loading in data. Similarly all other data. 
+attributes(detections$detection_timestamp_utc)
+attributes(detections$detection_timestamp_EST)
+
+##convert to appropriate time zone for analyses
+detections$EST_release_date_time<-as.POSIXct(detections$utc_release_date_time)
+
+#unique(detections$EST_release_date_time)
+attr(detections$EST_release_date_time, "tzone") <- "America/Toronto"
+detections$EST_release_date_time <- format(as.POSIXct(detections$EST_release_date_time, format = "%Y-%m-%d %H:%M:%S"))
+
+detections$EST_release_date_time <- (as.POSIXct(detections$EST_release_date_time, format = "%Y-%m-%d %H:%M:%S"))
+detections$EST_release_date_time<-force_tz(detections$EST_release_date_time,'America/Toronto')
+beep(5)
+
+###ensure data is in UTC for loading in data. Similarly all other data. 
+attributes(detections$utc_release_date_time)
+attributes(detections$EST_release_date_time)
+
+###################################################################
+saveRDS(detections, "./detections_filtered1B_2015-2025.rds")
+beep(5)
+############################################################
+
+####STOP HERE
+
+### CHECK RECEIVERS FOR ERRORS in receiver_timeline_plot script.
+
+
+#### QAQC'd receiver errors using the "Receiver_timeline_plot" script. No errors as of Feb 7, 2024 however...
+#### NOTE - Could combine the following sites: 37 and 26; 20 and 39; 11 and 16 ####################### 
+### if not combined it could mess with residency indices or other analyses based on site. 
+##################################################################
+
+###################### other filtering to do #############
+### spatial QAQC on detections - removes any false detections if detected in far away places like lake superior
+######remove false data from impossible receivers (NOT IN GLATOS)
+# i.e., only data found in lake ontario region (or feasible locations fish could swim to) and not false detections around the globe
+#Note - I have had salmon detected in Lake Superior which was impossible. Subsetting for the Lake Ont region removed it
+
+##can also make a bubble plot to determine if fish were detected outside of weird areas
+#
+#quartz() ## opens a new plotting window so plots don't overlap - only works for MAC
+detection_bubble_plot(detections, location_col= "station")
+beep(5)
+### some fish made it into lake erie and some in Lake Superior/Huron line.... is it a single fish or what?? No it was 6 fish!
+who<-detections %>% filter(deploy_lat<42.9)  # for Lake Erie
+#quartz()
+detection_bubble_plot(who, location_col= "station")
+
+erie<-who %>% group_by(common_name_e, animal_id, station) %>% summarise(n=n_distinct(detection_timestamp_EST), min=min(detection_timestamp_EST))
+unique(who$common_name_e)
+unique(who$glatos_project_receiver)  ## what receivers were the detections on?
+       ## check to make sure there isn't a mistake in recording the coordinates 
+      ## check the coordinates of these receivers to these in the deployment file
+
+whoH<-detections %>% filter(deploy_lat>45.0)  # for Lake Superior/Huron
+unique(whoH$common_name_e)
+#goldfish and walleye
+unique(whoH$transmitter_id)
+detection_bubble_plot(whoH, location_col= "station")
+unique(whoH$glatos_project_receiver) ## what receivers were the detections on?
+unique(whoH$station)
+## checking to make sure there isn't a mistake in recording the coordinates 
+## check the coordinates of these receivers to these in the deployment file
+receivers <- fread(cmd = "unzip -p HAMLO_20250110.zip GLATOS_receiverLocations_20250109_212456.csv")
+
+#receivers<-read_glatos_receivers("./Data/Telemetry/GLATOS_receiverLocations_20220222_194551.csv")
+#unique(receivers$glatos_project)
+#hamlo<-subset(receivers, glatos_project=="HAMLO")
+#unique(hamlo$station)
+
+#unique(who$glatos_project_receiver) 
+#unique(who$station)
+#trccm<-subset(receivers, glatos_project=="TRCCM")
+#lewae<-receivers[receivers$glatos_project=="LEWAE" & receivers$station=="EBG-106",]
+#unique(trccm$station)
+#unique(lewae$station)
+
+#haml0.dck01<-subset(receivers, station=="DCK-001")  ### receiver is in St. Mary's river, so not real detection
+## also checking the date of detection (2019) with the fish ID and tag 
+## expiration of 2017 - definitely not a real detection, so remove from dataset!!!
+
+###########
+#####  so it seems like the Lake Erie detections may be valid, and the St. MAry river 
+# are definitely not real, 
+### for now just remove St. Mary's detections and investigate Erie detections with individual plots
+
+                
+###or see if histogram of lats and longs are stranger than expected
+hist(detections$deploy_lat)
+hist(detections$deploy_long)
+
+##### could use below code to restrict fish to lake ontario. In this case, these seem legit. No other detections seemed spatially wonky
+##altered to include the legit lake erie detections. 
+detections<-detections[detections$deploy_lat< 45 ,]
+beep(5)
+saveRDS(detections, "./detections_filtered2_2015-2025.rds")
+beep(5)
+#### other filter that can be done ####
+### potentially a speed filter - within a certain timeframe, detections a select distance away are removed 
+## movements that are physically impossible. See TH code functions for this (cannot locate). Consider in future.
+
+##################################################################
+####################################################################
+#############
+
+🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
+🔴warning(STOPPED HERE FOR QAQC JAN 2025)🔴
+🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
+#ALL BELOW CODE HAS NOT BEEN COMPLETED JAN 2025
+
+
+
+##
+#############
+
+##########
+#see which fish we even need to assess for dead?
+#what tags are detected on receivers of interest during timeframe of interest? Here we are interested in full dataset.
+
+######TAG IDs to check if dead or alive from full detection dataset
+check<-c(unique(detections$transmitter_id))
+###324 tags to check. BUT we know of some that are dead with no useable data from doing this before
+
+
+####to help with updating the DeadAlive_SensorQuality_HHFish.xlsx file on the I drive in the HH/Telemetry/Basedata folder
+##create a baseline file about each fish. Then can focus on fish with detection histories later than date of last detection query
+## in this case, focus on anything with last detection in 2020 or later.
+taginfo<-detections %>% group_by(common_name_e, transmitter_id) %>% 
+  summarize(firstdetection=min(as.Date(detection_timestamp_EST)), lastdetection=max(as.Date(detection_timestamp_EST)),
+            tagged=min(as.Date(EST_release_date_time)),num_det=n(), num_rec=n_distinct(station), sensor=(ifelse(sum(is.na(Sensor.Val))>0,"F","T")))
+
+##DST = days since tagging
+taginfo$DST<-taginfo$lastdetection-taginfo$tagged
+
+write.csv(taginfo, "taginfo_for_status_update-Feb2024.csv")
+
+########################################################
+
+### Now can proceed with plotting out each fish. 
+
+detections<-readRDS("./QAQC/detections_filtered2_2015-2024.rds")
+beep(5)
+### for setting up - we will make plots of all fish to have a record of it and then update the folder as updates occur.
+### previously done but based on last detection, number of detections and receivers - 67 fish have changed and need to be reconfirmed their status.
+## run individual plots to update them all in the folder. Then update the "DeadAlive_SensorQuality_HH_Fish_May2021" workbook - use the 
+## taginfo_for_status_update.csv to update parts of the DeadAlive workbook. 
+
+##Notes:
+### we are primarily interested in determining if fish were A = alive for whole study, D = died right away and need to be removed;
+#AD = alive and then died and need to clip (C) the data, also looking at sensors and if they go bad and need to be clipped. At end of battery life there is the 
+#occasional max depth the sensor can read - this is faulty and needs to be removed. Also at the beginning, faulty depth sensors were a 
+#thing and needed to be corrected for (data removed). From here, we can determine if a fish has data that needs to R removed, C clipped,
+#or L leave alone (all good data). Most of this has already been flagged and fixed but moving forward we need to
+#verify the fish that have detections in 2020 onwards (or when last QAQC process was done). Fish with no new detections have already been 
+# QAQCd and should be noted in the workbook. 
+
+##################################################
+#plot depth and abacus plots for remaining fish
+
+##depth series plots - to QAQC mortalities/depth sensor errors, and visualize the data available.
+###subset for fish that have detections since last QAQC
+fish_plot<-detections %>% group_by(transmitter_id) %>% summarise(n=n_distinct(detection_timestamp_EST), maxtime=max(detection_timestamp_EST)) 
+fish_plot <-fish_plot %>% filter(maxtime>as.POSIXct("2022-11-01 00:00:00"))
+
+
+##create a subfolder for the depth series plots
+dir.create(file.path("./Individual Plots/updated/AbacusDepth"), recursive = TRUE)
+
+###loop to make individual plots per unique fish ID
+
+tags<-unique(fish_plot$transmitter_id)
+
+for(i in 1:length(tags)){
+  #i<-1
+  db<- subset(detections, detections$transmitter_id == paste0(tags[i]))
+  #head(db)
+  unique(db$sensor_unit)
+  species<-db$common_name_e[1]
+  id1<-unique(as.character(db$transmitter_id))
+  id<-paste("Tag ID ",id1,sep="")
+  
+  first <- min(db$detection_timestamp_EST) # time of first detection
+  last <- max(db$detection_timestamp_EST) # time of last detection
+  
+  db$station<-as.factor(db$station)
+  db <- db[order(db$detection_timestamp_EST, decreasing=F),]
+  
+  p1<-ggplot(db, aes(x= detection_timestamp_EST,y=station,group=1))+
+       geom_line()+
+    geom_point(col="chartreuse3",size=2)+
+    # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+    #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+    # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+    labs(x="Date",y="Station")+
+    xlim(first,last)+
+        scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+
+    theme(text = element_text(size=14))#+facet_wrap(~common_name_e, scales="free_y")
+  p1  
+  
+if( n_distinct(db$SensorType)<2){
+  p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    geom_point(col="black")+
+    
+    labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+    scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+theme(text=element_text(size=14))
+  
+  #p2
+}
+  if( n_distinct(db$SensorType)>1){
+    
+  #db$Sensor.Val[db$SensorType=="T"] <-*-1 
+  p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val, col=SensorType)) + 
+    geom_point()+
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    labs(x="Date", y="Depth (m)", fill="Sensor Type")+
+    #scale_y_reverse(sec.axis = sec_axis(~rev(.),name="Temperature (°C)"))+
+    scale_y_continuous(sec.axis = dup_axis(name="Temperature (°C)"))+
+    scale_x_datetime(labels = date_format("%m-%Y"))+
+    
+    theme_bw()+theme(text=element_text(size=14))+
+    scale_colour_manual(labels=c("Depth","Temperature"), values=c("black","tomato"))
+  
+  #p2
+  }
+  #margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+  hmmm<-ggarrange(p1,p2,nrow=1)
+  hmmm<-annotate_figure(hmmm,
+                        top = text_grob(paste('Tag ID',id1, '-', species, ''), color = "black", face = "bold", size = 14))
+  
+  ggsave(plot=hmmm, paste0("./Individual Plots/updated/AbacusDepth/",species,"_ID",id1,"_abacus_depth_plots.png"),  width = 35, height = 20,units = "cm", dpi = 400, bg="white")
+}
+######################################################
+
+
+########???????????????
+#####  should we add a 'suspected death/tag drop date' for ID that are known or 
+##   presumed dead, so it makes filtering easier?????????
+########???????????????
+### yes - that's what the dead/alive excel file is for. You update it as you go thru these
+#then load it for easy filtering. Code below is for trying to figure out the exact date of death/tag drop
+
+
+beep(5)
+
+###################################################################
+
+#############            Visualize spatial distribution     ###################
+
+?detection_bubble_plot
+
+###choose great lakes shoreline - best detailed shapefile I have found for HH details
+shorelinemap<- readOGR("./Data/LakeOntShoreline_MajorWaters.shp", "LakeOntShoreline_MajorWaters")
+
+###need to convert to lat long from UTMS or points
+map_NAD83 <- spTransform(shorelinemap, CRS("+proj=longlat +datum=NAD83"))
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+#map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+tags<-unique(fish_plot$transmitter_id)
+
+##create a subfolder for the spatial plots
+dir.create(file.path("./Individual Plots/updated/BubblePlots/"), recursive = TRUE)
+
+#loop to go through all fish
+for (i in 1:length(tags)){
+  filename = paste0(tags[i])
+  temp <- subset(detections, detections$transmitter_id == paste0(tags[i]))
+  
+  ###save the map using out_file (rejigged this to include Lake Erie detections but shape file isn't correct. Just be aware)
+  detection_bubble_plot(temp, location_col= "station",map=map_NAD83 , 
+                        background_ylim = c(41, 44.5), background_xlim = c(-80.5, -76) , 
+                        out_file=paste0("./Individual Plots/updated/Bubbleplots/", temp$common_name_e[1],'-', filename, "_Bubbleplot.png"))
+  
+}
+
+beep(5)
+
+############################################################################################
+###with above data for each individual, go thru and assess fish with new detections to determine if fish are alive, dead, alive and died;
+#if fish has good or bad sensor data, and ultimately if fish has data that needs to be removed, clipped, or left alone. 
+### update the dead alive file. 
+## can also run thru what has been QAQC'd before and replot and see if anything else needs to be fixed. It might make it easier to see 
+#what needs to be updated on teh dead alive file. 
+############################################################################################
+############################################ 
+
+###if you need to verify time to clip off - based off depth and abacus plots
+###subset by individual tag
+tagID<-"4497"
+
+# subset one individual
+temp <- detections[detections$transmitter_id == tagID, ]
+temp <- temp[order(temp$detection_timestamp_EST, decreasing=F),]
+unique(temp$animal_id)
+species<-unique(temp$common_name_e)
+###find when fish dies or data to clip off
+## add to list below
+temp<-temp[!(temp$transmitter_id==tagID & temp$detection_timestamp_utc > "2022-10-15 00:00:00"),] 
+#temp<-temp[!(temp$transmitter_id==tagID & temp$Sensor.Val > 30),]
+
+first <- min(temp$detection_timestamp_EST) # time of first detection
+last <- max(temp$detection_timestamp_EST) # time of last detection
+
+### to plot to make sure its clipped at right spot. 
+#quartz()
+p1<-ggplot(temp, aes(x= detection_timestamp_EST,y=station,group=1))+
+  geom_line()+
+  geom_point(col="chartreuse3",size=2)+
+  # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+  #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+  # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+  labs(x="Date",y="Station")+
+  xlim(first,last)+
+  scale_x_datetime(labels = date_format("%m-%Y"))+
+  theme_bw()+
+  theme(text = element_text(size=14))#+facet_wrap(~common_name_e, scales="free_y")
+#p1  
+
+if( n_distinct(temp$SensorType)<2){
+  p2 <- ggplot(data=temp, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    geom_point(col="black")+
+    
+    labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+    scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+theme(text=element_text(size=14))
+  
+  #p2
+}
+if( n_distinct(temp$SensorType)>1){
+  
+  #db$Sensor.Val[db$SensorType=="T"] <-*-1 
+  p2 <- ggplot(data=temp, aes(x= detection_timestamp_EST,y=Sensor.Val, col=SensorType)) + 
+    geom_point()+
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    labs(x="Date", y="Depth (m)", fill="Sensor Type")+
+    #scale_y_reverse(sec.axis = sec_axis(~rev(.),name="Temperature (°C)"))+
+    scale_y_continuous(sec.axis = dup_axis(name="Temperature (°C)"))+
+    scale_x_datetime(labels = date_format("%m-%Y"))+
+    
+    theme_bw()+theme(text=element_text(size=14))+
+    scale_colour_manual(labels=c("Depth","Temperature"), values=c("black","tomato"))
+  
+  #p2
+}
+#margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+hmmm<-ggarrange(p1,p2,nrow=1)
+hmmm<-annotate_figure(hmmm,
+                      top = text_grob(paste('Tag ID',tagID, '-', species, ''), color = "black", face = "bold", size = 14))
+hmmm
+
+#plot(Sensor.Val~detection_timestamp_EST,data=temp,xlab="Date",ylab="Depth (m)",xaxt="n",ylim = rev(range(Sensor.Val)),xlim=c(as.POSIXct(first, tz="EST"),as.POSIXct(last, tz="EST")) )
+#title(main=(paste('Tag ID',tagID, '-', temp$common_name_e[1], '')), adj=0, cex.main=1.5, font.main=2)
+#tickpos <- seq(as.POSIXct(first, tz="EST"), 
+#               as.POSIXct(last, tz="EST"), 
+#               by="1 month")
+#axis.POSIXct(1,at=tickpos,format="%b-%Y",cex.axis=0.8, las=1)
+
+########################################################
+
+
+############################################################################################
+### Now that the fish detections locations/timelines have been visualized 
+#and the DeadAlive_SensorQuality_HH_Fish workbook updated - we can remove the dead fish detections and unusable fish.
+##This includes all fish that should be completely removed "R" or clipping the portion of detections where they are dead "C"
+
+##load up data
+detections<-readRDS("./QAQC/detections_filtered2_2015-2024.rds")
+
+#detections2<-detections
+### need to subset for dead fish based on the tag status file that was updated. Add this info to the detection data.
+status<- read_excel("./Data/DeadAlive_SensorQuality_HH_Fish_Feb2024.xlsx")
+names(status)
+
+###rename column names for easy coding
+names(status)[1] <- "common_name_e"
+names(status)[2] <- "transmitter_id"
+names(status)[11] <- "battery_status"  ##an incomplete column but can help determine which fish are out of the system
+names(status)[12] <- "life_status"
+names(status)[13] <- "sensor_quality"
+names(status)[14] <- "data_quality"
+names(status)[15] <- "suitable_analyses"
+names(status)[16] <- "remove_clip_leave"  ##based on all other columns - this is the important one where it was decided what to do with the individual's data
+names(status)[18] <- "notes"
+
+
+taginfo<-detections %>% group_by(common_name_e, transmitter_id) %>% 
+  summarise(firstdetection=min(as.Date(detection_timestamp_EST)), lastdetection=max(as.Date(detection_timestamp_EST)),
+            tagged=min(as.Date(EST_release_date_time)),num_det=n(), num_rec=n_distinct(station), depthsensor=(ifelse(sum(is.na(Sensor.Val))>0,"F","T")))
+
+##DST = days since tagging
+taginfo$DST<-taginfo$lastdetection-taginfo$tagged
+## the number of days with detection data
+taginfo$detection_days <-taginfo$lastdetection-taginfo$firstdetection
+
+status<-status %>% select(c(1,2,11:18))
+status$transmitter_id<-as.character(status$transmitter_id)
+
+
+status<-full_join(taginfo, status, by=c("common_name_e", "transmitter_id"))  #
+status$detection_days<-as.numeric(status$detection_days)
+status$DST<-as.numeric(status$DST)
+
+detections<-left_join(detections,status, by=c("common_name_e", "transmitter_id"))
+beep(5)
+
+tagsummary<-detections %>% group_by(life_status) %>% summarize(n_fish=n_distinct(transmitter_id))
+tagsummary2<-detections %>% group_by(common_name_e,life_status) %>% summarize(n_fish=n_distinct(transmitter_id))
+
+###want to get a list of all the tag IDs that need to be removed, clipped, or left alone
+sorting<-detections %>% group_by(remove_clip_leave, transmitter_id) %>% summarize(n=n())
+
+####### remove bad fish with no useable data ####
+remove<-sorting %>% filter(remove_clip_leave=="R")
+###these tags need to be removed from dataset
+remove_fish<-remove$transmitter_id  #76 fish
+
+detections<-detections %>% filter(!transmitter_id %in% remove_fish)
+beep(5)
+
+#unique(detections$transmitter_id)
+unique(detections$transmitter_id) ##compare to see if it removed the proper # of fish. 295 is correct. 
+
+unique(detections$remove_clip_leave)
+
+
+######## clip off the bad data for fish with some good data ######
+###now to subset fish to clip off the bad data where they were considered dead or had a sensor malfunction (often at end of battery life it can give a wonky value)
+clip<-sorting %>% filter(remove_clip_leave=="C")
+clip_fish<-clip$transmitter_id ###108 fish to clip
+
+
+toclip<-subset(detections, transmitter_id %in% clip_fish) ##subset the fish that need to be clipped.
+detections3<-subset(detections, !transmitter_id %in% clip_fish) ### remove all clip fish from dataset for now - will add back in after clipped
+beep(5)
+
+##need to remove dead data from clip group
+toclip2<-toclip ## a back up in case we mess up stuff below.
+
+###### when determined how to clip - there is a simple one line of code to remove the bad data. See below for figuring out exact timelines.
+### need a line for each of the clip_fish - unfortunately this is tedious but no way around this. Fortunately most of it has been done previously.
+clip_fish
+###go thru each fish and see how/when to clip - usually by a time or depth sensor value. 
+##no need to redo fish without new detection data - keep it the same in the code below. Update for fish with new detection data only.
+
+
+
+##based on going thru each individual, clip time is 24 prior it was 1st noticed
+##fill in the code below to keep the appropriate data. 
+##Done Jan 2023 - list of 96 fish here. 
+###example explanation - this fish died after Jan 2020 so we removed all data after Jan 2020
+toclip2<-toclip2[!(toclip2$transmitter_id==14178 & toclip2$detection_timestamp_EST > "2020-01-06 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14180 & toclip2$detection_timestamp_EST > "2019-09-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14181 & toclip2$detection_timestamp_EST > "2019-05-23 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14188 & toclip2$detection_timestamp_EST > "2019-02-19 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14512 & toclip2$detection_timestamp_EST > "2019-03-19 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14513 & toclip2$detection_timestamp_EST > "2019-10-18 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==1376 & toclip2$detection_timestamp_EST > "2023-05-07 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==13681 & toclip2$detection_timestamp_EST > "2022-07-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==13685 & toclip2$detection_timestamp_EST > "2022-07-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==12553 & toclip2$detection_timestamp_EST > "2023-04-26 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==14236 & toclip2$detection_timestamp_EST > "2022-05-11 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==1370 & toclip2$detection_timestamp_EST > "2023-06-15 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==1372 & toclip2$detection_timestamp_EST > "2023-07-24 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==1378 & toclip2$detection_timestamp_EST > "2023-06-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==4488 & toclip2$detection_timestamp_EST > "2022-12-20 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==12544 & toclip2$detection_timestamp_EST > "2022-12-20 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==14173 & toclip2$detection_timestamp_EST > "2022-05-15 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==4497 & toclip2$detection_timestamp_EST > "2022-10-15 00:00:00"),]
+
+###example explanation - this fish died and sank to bottom but all depth values shallower than 8m was when it was alive
+toclip2<-toclip2[!(toclip2$transmitter_id==14515 & toclip2$Sensor.Val > 8),]
+toclip2<-toclip2[!(toclip2$transmitter_id==4498 & toclip2$Sensor.Val > 12),]
+###example explanation - this fish's transmitter died and had an erroneous sensor value (usually a blip at the end of the depth plot) and is then removed
+toclip2<-toclip2[!(toclip2$transmitter_id==14521 & toclip2$detection_timestamp_EST > "2020-07-25 00:00:00"),]  
+toclip2<-toclip2[!(toclip2$transmitter_id==14522 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==14523 & toclip2$detection_timestamp_EST > "2018-11-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==14525 & toclip2$detection_timestamp_EST > "2020-09-25 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==14527 & toclip2$detection_timestamp_utc > "2018-10-08 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14528 & toclip2$Sensor.Val > 8),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14795 & toclip2$detection_timestamp_utc > "2019-01-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14796 & toclip2$detection_timestamp_utc > "2018-09-10 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14806 & toclip2$detection_timestamp_utc > "2018-11-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14807 & toclip2$detection_timestamp_utc > "2018-09-24 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15202 & toclip2$detection_timestamp_utc > "2018-05-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15206 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15207 & toclip2$Sensor.Val > 30),]
+toclip2$Sensor.Val[which(toclip2$transmitter_id == "15208")] <- NA ###it had a bad sensor but detection data was valid - just removed the sensor data.
+toclip2<-toclip2[!(toclip2$transmitter_id==15211 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15212 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15213 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15217 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15246 & toclip2$detection_timestamp_utc > "2018-01-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15440 & toclip2$detection_timestamp_utc > "2019-02-05 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15448 & toclip2$detection_timestamp_utc > "2016-09-29 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15451 & toclip2$detection_timestamp_utc > "2017-07-18 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15452 & toclip2$detection_timestamp_utc > "2017-10-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15755 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15759 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15760 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15763 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15764 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15765 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15769 & toclip2$detection_timestamp_utc > "2016-06-28 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15771 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15772 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15773 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15774 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15831 & toclip2$detection_timestamp_utc > "2019-08-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15834 & toclip2$detection_timestamp_utc > "2018-09-11 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15845 & toclip2$detection_timestamp_utc > "2020-05-21 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15851 & toclip2$Sensor.Val > 13),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15855 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15862 & toclip2$detection_timestamp_utc > "2018-07-17 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==15869 & toclip2$detection_timestamp_utc > "2017-11-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==15874 & toclip2$detection_timestamp_utc > "2020-06-30 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==16057 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==16060 & toclip2$Sensor.Val > 30),]
+toclip2<-toclip2[!(toclip2$transmitter_id==16061 & toclip2$Sensor.Val > 25),]
+toclip2<-toclip2[!(toclip2$transmitter_id==16063 & toclip2$detection_timestamp_utc > "2018-04-18 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==25130 & toclip2$detection_timestamp_utc > "2019-06-10 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==25136 & toclip2$detection_timestamp_utc > "2019-06-10 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==29 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==31 & toclip2$detection_timestamp_utc > "2016-12-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==32 & toclip2$detection_timestamp_utc > "2016-01-05 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==33 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==34 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==36 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==37 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==39 & toclip2$detection_timestamp_utc > "2016-10-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==40 & toclip2$detection_timestamp_utc > "2016-10-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==41 & toclip2$detection_timestamp_utc > "2016-07-02 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==44 & toclip2$detection_timestamp_utc > "2016-01-20 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==46 & toclip2$detection_timestamp_utc > "2017-01-01 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==49 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==50 & toclip2$Sensor.Val > 20),]
+toclip2<-toclip2[!(toclip2$transmitter_id==53 & toclip2$Sensor.Val > 50),]
+toclip2<-toclip2[!(toclip2$transmitter_id==54 & toclip2$detection_timestamp_utc > "2016-05-30 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==55 & toclip2$detection_timestamp_utc > "2016-02-29 00:00:00"),]
+toclip2<-toclip2[!(toclip2$transmitter_id==79 & toclip2$Sensor.Val > 60),]
+toclip2<-toclip2[!(toclip2$transmitter_id==83 & toclip2$Sensor.Val > 60),]
+toclip2<-toclip2[!(toclip2$transmitter_id==9161 & toclip2$detection_timestamp_EST > "2020-10-29 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9165 & toclip2$detection_timestamp_EST > "2021-04-18 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9170 & toclip2$detection_timestamp_EST > "2021-04-16 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9162 & toclip2$detection_timestamp_EST > "2021-04-12 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13677 & toclip2$detection_timestamp_EST > "2021-11-14 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13680 & toclip2$detection_timestamp_EST > "2022-04-18 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13682 & toclip2$detection_timestamp_EST > "2022-05-15 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13683 & toclip2$detection_timestamp_EST > "2021-11-03 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13686 & toclip2$detection_timestamp_EST > "2022-05-11 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13687 & toclip2$detection_timestamp_EST > "2022-10-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13688 & toclip2$detection_timestamp_EST > "2021-10-31 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13689 & toclip2$detection_timestamp_EST > "2022-06-02 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13690 & toclip2$detection_timestamp_EST > "2022-06-06 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==13695 & toclip2$detection_timestamp_EST > "2022-07-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==12547 & toclip2$detection_timestamp_EST > "2021-07-01 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==12549 & toclip2$detection_timestamp_EST > "2022-01-04 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9152 & toclip2$detection_timestamp_EST > "2022-01-19 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9154 & toclip2$detection_timestamp_EST > "2021-09-02 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9156 & toclip2$detection_timestamp_EST > "2022-09-09 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==9160 & toclip2$detection_timestamp_EST > "2022-07-22 00:00:00"),] 
+toclip2<-toclip2[!(toclip2$transmitter_id==14170 & toclip2$detection_timestamp_EST > "2022-01-04 00:00:00"),] 
+
+
+beep(5)
+
+##############################################
+###############################################
+
+####bind clipped data back to overall dataset
+clipped<-rbind(toclip2,detections3)
+
+###bad data were clipped out
+saveRDS(clipped, "./QAQC/HH_detections_clipped_filtered_2015-2024.rds")
+beep(5)
+#################################################################
+
+
+####################################################################################
+##plot QAQC data to ensure all fish have been appropriately QAQCd. 
+##if you find an error, update the deadalive excel sheet and code above. 
+#################################################################
+#detections<-clipped
+detections<-readRDS("./QAQC/HH_detections_clipped_filtered_2015-2024.rds")
+
+
+##create a subfolder for plots we need of the final dataset
+dir.create(file.path("./Individual Plots/QAQC/AbacusDepth/"), recursive = TRUE)
+
+
+
+tags<-unique(detections$transmitter_id)
+
+for(i in 1:length(tags)){
+  #i<-1
+  db<- subset(detections, detections$transmitter_id == paste0(tags[i]))
+  #head(db)
+  unique(db$sensor_unit)
+  species<-db$common_name_e[1]
+  id1<-unique(as.character(db$transmitter_id))
+  id<-paste("Tag ID ",id1,sep="")
+  
+  first <- min(db$detection_timestamp_EST) # time of first detection
+  last <- max(db$detection_timestamp_EST) # time of last detection
+  
+  db$station<-as.factor(db$station)
+  db <- db[order(db$detection_timestamp_EST, decreasing=F),]
+  
+  p1<-ggplot(db, aes(x= detection_timestamp_EST,y=station,group=1))+
+    geom_line()+
+    geom_point(col="chartreuse3",size=2)+
+    # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+    #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+    # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+    labs(x="Date",y="Station")+
+    xlim(first,last)+
+    scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+
+    theme(text = element_text(size=14))#+facet_wrap(~common_name_e, scales="free_y")
+  p1  
+  
+  if( n_distinct(db$SensorType)<2){
+    p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+      #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+      geom_point(col="black")+
+      
+      labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+      scale_x_datetime(labels = date_format("%m-%Y"))+
+      theme_bw()+theme(text=element_text(size=14))
+    
+    #p2
+  }
+  if( n_distinct(db$SensorType)>1){
+    
+    #db$Sensor.Val[db$SensorType=="T"] <-*-1 
+    p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val, col=SensorType)) + 
+      geom_point()+
+      #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+      labs(x="Date", y="Depth (m)", fill="Sensor Type")+
+      #scale_y_reverse(sec.axis = sec_axis(~rev(.),name="Temperature (°C)"))+
+      scale_y_continuous(sec.axis = dup_axis(name="Temperature (°C)"))+
+      scale_x_datetime(labels = date_format("%m-%Y"))+
+      
+      theme_bw()+theme(text=element_text(size=14))+
+      scale_colour_manual(labels=c("Depth","Temperature"), values=c("black","tomato"))
+    
+    #p2
+  }
+  #margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+  hmmm<-ggarrange(p1,p2,nrow=1)
+  hmmm<-annotate_figure(hmmm,
+                        top = text_grob(paste('Tag ID',id1, '-', species, ''), color = "black", face = "bold", size = 14))
+  
+  ggsave(plot=hmmm, paste0("./Individual Plots/QAQC/AbacusDepth/",species,"_ID",id1,"_abacus_depth_plots.png"),  width = 35, height = 20,units = "cm", dpi = 400, bg="white")
+}
+
+beep(5)
+######################################################
+####
+##choose great lakes shoreline - best detailed shapefile I have found for HH details
+shorelinemap<- readOGR("./Data/LakeOntShoreline_MajorWaters.shp", "LakeOntShoreline_MajorWaters")
+
+###need to convert to lat long from UTMS or points
+map_NAD83 <- spTransform(shorelinemap, CRS("+proj=longlat +datum=NAD83"))
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+#map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+tags<-unique(detections$transmitter_id)
+
+##create a subfolder for the spatial plots
+dir.create(file.path("./Individual Plots/QAQC/BubblePlots/"), recursive = TRUE)
+
+#loop to go through all fish
+for (i in 1:length(tags)){
+  filename = paste0(tags[i])
+  temp <- subset(detections, detections$transmitter_id == paste0(tags[i]))
+  
+  ###save the map using out_file (rejigged this to include Lake Erie detections but shape file isn't correct. Just be aware)
+  detection_bubble_plot(temp, location_col= "station",map=map_NAD83 , 
+                        background_ylim = c(42.85, 44.5), background_xlim = c(-80.25, -77.4) , 
+                        out_file=paste0("./Individual Plots/QAQC/Bubbleplots/", temp$common_name_e[1],'-', filename, "_Bubbleplot.png"))
+  
+}
+
+beep(5)
+
+##create a subfolder for the spatial plots
+dir.create(file.path("./Individual Plots/QAQC/HH_BubblePlots/"), recursive = TRUE)
+
+#loop to go through all fish
+for (i in 1:length(tags)){
+  filename = paste0(tags[i])
+  temp <- subset(detections, detections$transmitter_id == paste0(tags[i]))
+  
+  ###save the map using out_file (rejigged this to include Lake Erie detections but shape file isn't correct. Just be aware)
+  detection_bubble_plot(temp, location_col= "station",map=map_NAD83 , 
+                        background_ylim = c(43.22, 43.35), background_xlim = c(-79.95, -79.75) , 
+                        out_file=paste0("./Individual Plots/QAQC/HH_Bubbleplots/", temp$common_name_e[1],'-', filename, "_Bubbleplot.png"))
+  
+}
+
+beep(5)
+
+###look through figures and update above code if something is still off with any fish (depth sensor value error or dead etc). Rerun for new figures.
+############# DONE QAQC PROCESS! ####################
+##########################################################
+

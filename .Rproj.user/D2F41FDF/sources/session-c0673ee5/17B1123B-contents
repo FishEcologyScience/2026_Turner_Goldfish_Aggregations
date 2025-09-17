@@ -1,0 +1,816 @@
+#summarize data for each receiver
+#number of detection per day per receiver and number of unique individuals
+#plot those with X as time for all the GC receivers for the designated spring time period
+#just do it for one year but could combine the years later when we have all the data
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lubridate)
+setwd("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish")
+goldfish204<-readRDS("HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025_correct.rds")
+
+goldfish204 <- goldfish204[, -1]
+
+colnames(goldfish204)[colnames(goldfish204) == "tag_serial_number"] <- "animal_id"
+head(goldfish204$deploy_lat)
+
+goldfish204$detection_timestamp_utc <- as.POSIXct(goldfish204$detection_timestamp_utc)
+
+###figure out what to call the GC recs
+
+unique(goldfish204$glatos_array)
+
+#HAM_rec <- filter(GLATOS_receiverLocations_20250109_212456, glatos_array == "HAM")
+
+
+unique(HAM_rec$station_no)
+  
+  
+  GC_recs <- HAM_rec %>%
+  filter(station_no %in% c("29", "62", "33", 
+                           "61", "60", "67", 
+                           "66", "59", "68", "59", "64", "86", "87"))
+HHmap
+
+#GCzoom in 
+x_limits_GC <- c(-79.90, -79.86)  # Define your desired range for x-axis
+y_limits_GC <- c(43.27, 43.3)  # Define your desired range for y-axis
+
+
+#now plot so we know where they are so we can assign them 
+gcrecs_plotted <- ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_GC, ylim = y_limits_GC) +
+  geom_point(data = GC_recs, aes(x = deploy_long, y = deploy_lat)) +
+  geom_text(data = GC_recs, aes(x = deploy_long, y = deploy_lat, label = station_no), 
+            vjust = -1, hjust = 0.5, color = "black", size = 3)  # Adjust the positioning and appearance of the labels
+#############################################
+#redoing the daily propotional code arcoss all receivers to be just across the groups
+#will be unable to do an animation style plot i think
+####################################################
+
+
+
+#HAM-029, HAM-062, HAM-033, HAM-061, HAM-060, HAM-067, HAM-066, HAM-059
+
+HH_GConly <- goldfish204 %>%
+  filter(station_no %in% c("29", "62", "33", 
+                           "61", "60", "67", 
+                           "66", "59", "68", "59", "64", "86", "87"))
+
+
+#  goldfish204_2$station %in% c("HAM-029", "HAM-033", "HAM-059", "HAM-060", "HAM-061", "HAM-062", "HAM-064", "HAM-066", "HAM-067", "HAM-068", "HAM-086", "HAM-087") ~ "Grindstone",
+
+######################
+  
+
+HH_GConly$rec_group <- case_when(
+  HH_GConly$station %in% c("HAM-029") ~ "GC Mouth",
+  HH_GConly$station %in% c("HAM-062") ~ "sunfish pond",
+  HH_GConly$station %in% c("HAM-068") ~ "second bridge",
+  HH_GConly$station %in% c("HAM-060") ~ "blackbird pond",
+  HH_GConly$station %in% c("HAM-061") ~ "osprey pond",
+  HH_GConly$station %in% c("HAM-033") ~ "Plains rd. bridge",
+  HH_GConly$station %in% c("HAM-087") ~ "first bend",
+  HH_GConly$station %in% c("HAM-066") ~ "ds pond 1",
+  HH_GConly$station %in% c("HAM-067") ~ "pond 2",
+  HH_GConly$station %in% c("HAM-059") ~ "SPS bridge",
+  HH_GConly$station %in% c("HAM-086") ~ "Unsworth",
+  TRUE ~ NA_character_ # Default to NA if no match
+)################################
+
+HH_GConly$year<-year(HH_GConly$detection_timestamp_EST)
+unique(HH_GConly$rec_group)
+
+HH_GConly_unique <- HH_GConly %>%
+  filter(year %in% c(2022, 2023)) %>%  # Keep only 2022 and 2023
+  distinct(station, year, .keep_all = TRUE)  # Keep one row per station per year
+
+
+library(ggrepel)
+library(ggplot2)
+#get a map plot with these receivers plotted and the names showing up
+
+##bubble plot with proportions 
+
+x_limits_GC <- c(-79.89, -79.86)  # Define your desired range for x-axis
+y_limits_GC <- c(43.28, 43.3)  # Define your desired range for y-axis
+
+GC_props$rec_group<-(GC_props$Receiver)
+GC_props <- GC_props %>% select(-Receiver)
+
+HH_GConly_unique <- HH_GConly_unique[, -c(1,2,4,5,6,7,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28
+                                          ,29,30,31,32,33,34,35,36,37,38)]  # Drops 2nd and 4th columns
+
+library(dplyr)
+
+# Assuming df1 has rec_groups and other data, and df2 has rec_groups, lat, lon
+write.csv(HH_GConly_unique, "GC_reclocs.csv")
+HH_GConly_unique<-read.csv("GC_reclocs.csv")
+
+gc_merged <- HH_GConly_unique %>%
+  left_join(GC_props, by = "rec_group")  # Change "receiver_name" to the correct column name
+
+
+
+HH_GConly_unique$rec_group <- case_when(
+  HH_GConly_unique$station_no %in% c("29") ~ "Grindstone Creek Mouth",
+  HH_GConly_unique$station_no %in% c("62") ~ "Sunfish pond",
+  HH_GConly_unique$station_no %in% c("68") ~ "Grindstone Creek 2",
+  HH_GConly_unique$station_no %in% c("60") ~ "Blackbird pond",
+  HH_GConly_unique$station_no %in% c("61") ~ "Osprey pond",
+  HH_GConly_unique$station_no %in% c("33") ~ "Grindstone Creek 3",
+  HH_GConly_unique$station_no %in% c("87") ~ "first bend",
+  HH_GConly_unique$station_no %in% c("66") ~ "ds pond 1",
+  HH_GConly_unique$station_no %in% c("67") ~ "Grindstone Creek 4",
+  HH_GConly_unique$station_no %in% c("59") ~ "Grindstone Creek 5",
+  HH_GConly_unique$station_no %in% c("86") ~ "Unsworth",
+  TRUE ~ NA_character_ # Default to NA if no match
+)################################
+
+
+gc_bubbleplot <- ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  facet_wrap(~year)+
+  coord_cartesian(xlim = x_limits_GC, ylim = y_limits_GC) +
+  geom_point(data = GC_props, aes(x = deploy_long, y = deploy_lat, size=prop, color=Receiver)) +
+  geom_text(data = GC_props, aes(x = deploy_long, y = deploy_lat, label = num_individuals), 
+            vjust = 0, hjust = 0, color = "black", size = 3)
+
+gc_bubbleplot
+
+
+GC_props<-read_excel("GC_props.xlsx")
+
+
+x_limits_GC_new <- c(-79.89, -79.875)  # Define your desired range for x-axis
+y_limits_GC_new <- c(43.285, 43.3)  # Define your desired range for y-axis
+
+library(ggplot2)
+
+GC_props$Receiver <- case_when(
+  GC_props$Receiver %in% c("GC mouth") ~ "Grindstone Creek Mouth",
+  GC_props$Receiver %in% c("sunfish pond") ~ "Sunfish pond",
+  GC_props$Receiver %in% c("second bridge") ~ "Grindstone Creek 2",
+  GC_props$Receiver %in% c("blackbird pond") ~ "Blackbird pond",
+  GC_props$Receiver %in% c("osprey pond") ~ "Osprey pond",
+  GC_props$Receiver %in% c("Plains rd. bridge") ~ "Grindstone Creek 3",
+  GC_props$Receiver %in% c("pond 2") ~ "Grindstone Creek 4",
+  GC_props$Receiver %in% c("SPS bridge") ~ "Grindstone Creek 5",
+  TRUE ~ NA_character_ # Default to NA if no match
+)################################
+unique(GC_props$Receiver)
+
+gc_bubbleplot_1 <- ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "lightblue3") +
+  facet_wrap(~year) +
+  coord_cartesian(xlim = x_limits_GC_new, ylim = y_limits_GC_new) +
+  # Adjusted point size while keeping proportions
+  geom_point(data = GC_props, aes(x = deploy_long, y = deploy_lat, size = prop, color = Receiver), alpha = 1) +
+  # Increase the size range (adjust as needed)
+  scale_size_continuous(range = c(4, 12)) +  
+scale_color_manual(values = brewer.pal(n = length(unique(GC_props$Receiver)), name = "Pastel2"))+
+  geom_text(data = GC_props, aes(x = deploy_long, y = deploy_lat, label = num_individuals), 
+            vjust = 0, hjust = 0, color = "black", size = 6, fontface="bold") +
+  theme_minimal() +
+  labs(title = "",
+       size = "Proportion",
+       color = "Receiver", 
+       x="Lon",
+       y="Lat") +
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 40, face = "bold"),  # Title size
+    axis.title.x = element_text(size = 16),  # X-axis label size
+    axis.title.y = element_text(size = 16),  # Y-axis label size
+     axis.text.x = element_text(size = 14),  # X-axis tick label size
+    axis.text.y = element_text(size = 14),  # Y-axis tick label size
+   strip.text = element_text(size = 15, face = "bold"),
+    legend.text = element_text(size = 13))+  # Legend text size )
+  guides(color = guide_legend(override.aes = list(size = 6)))  
+
+gc_bubbleplot_1
+
+
+gc_bubbleplot_1
+
+
+
+#make a dataframe with porportions 
+
+
+#############################################
+####fishway only 
+cootesfishway <- goldfish204 %>%
+  filter(station_no %in% c("43", "32"))
+unique(cootesfishway$station_no)
+
+cootesfishway$rec_fishway<-case_when(
+  cootesfishway$station %in% c("HAM-043", "HAM-032") ~ "Fishway", 
+  TRUE ~ NA_character_ # Default to NA if no match
+)
+cootesfishway$year<-year(cootesfishway$detection_timestamp_EST)
+
+cootesfishway_summary <- cootesfishway %>%
+  group_by(rec_fishway, date = as.Date(detection_timestamp_utc)) %>%
+  summarize(
+    daily_detections = n(),  # Total number of detections per day per station
+    unique_individuals = n_distinct(animal_id)  # Number of unique individuals per day per station
+  ) %>%
+  ungroup()
+
+cootesfishway_summary_doy$year<-as.factor(cootesfishway_summary_doy$year)
+
+
+
+p1 <- ggplot(cootesfishway_summary, aes(x = date)) +
+  geom_bar(aes(y = daily_detections), stat = "identity", fill = "darkblue", width = 0.7) +
+  facet_wrap(~rec_fishway, ncol = 2, scales = "free_y") +
+  labs(x = "Date", y = "Daily Detections", 
+       title="") +
+  #scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +
+  facet_wrap(~year)
+  theme_minimal() +
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.title.y.right = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1)# Remove the right y-axis title
+  )
+
+
+p1
+# Overlay points for unique individuals
+p2 <- p1 +
+  geom_point(aes(y = unique_individuals * (max(cootesfishway_summary$daily_detections) / 5)), shape = 1, size = 2, color = "black") +
+  scale_y_continuous(sec.axis = sec_axis(~ . / (max(cootesfishway_summary$daily_detections) / 5), name = ""))
+
+# Print the combined plot
+print(p2)
+
+#plot is sho
+#change this to be doy
+cootesfishway$doy<- strftime(cootesfishway$detection_timestamp_EST, format = "%j")
+cootesfishway$doy<-as.numeric(cootesfishway$doy)
+
+cootesfishway$detection_timestamp_EST <- as.POSIXct(cootesfishway$detection_timestamp_EST)
+
+cootesfishway_summary_doy <- cootesfishway %>%
+  mutate(year = year(detection_timestamp_EST)) %>%  # Ensure year is extracted from the 'date' column
+  filter(year %in% c(2022, 2023, 2024)) %>%  # Filter to keep only the years 2022, 2023, 2024
+  group_by(rec_fishway, doy, year, date) %>%  # Keep 'date' in the grouping to carry it forward
+  summarize(
+    daily_detections = n(),  # Total number of detections per day per station
+    unique_individuals = n_distinct(animal_id)  # Number of unique individuals per day per station
+  ) %>%
+  ungroup()
+
+
+#remove 2021
+
+
+
+p1 <- ggplot(cootesfishway_summary_doy, aes(x = doy, fill = factor(year))) +  
+  # Add the light grey box first so it's behind the bars
+  geom_rect(aes(xmin = 101, xmax = 148, ymin = -Inf, ymax = Inf), 
+            fill = "bisque1", alpha = 0.7) +  # Adjust the transparency of the box
+   geom_rect(aes(xmin = 204, xmax = 261, ymin = -Inf, ymax = Inf), 
+            fill = "thistle1", alpha = 0.7) +  # Adjust the transparency of the box
+  
+  # Then add the bar plot
+  geom_bar(aes(y = daily_detections), stat = "identity", width = 1) +  # Bar plot
+  
+  labs(x = "Day of Year", y = "Daily Detections", 
+       title = "") +
+  scale_fill_manual(values = c("2022" = "darkblue", "2023" = "darkgreen", "2024" = "darkred")) +  # Customize the colors
+  theme_minimal() +
+  facet_wrap(~year) +  # Facet by year
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.title.y.right = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    legend.title = element_text(size = 12, face = "bold"),  # Customize legend title
+    legend.text = element_text(size = 10),  # Customize legend text size
+    strip.text = element_text(size = 12)  # Customize facet labels (strip text)
+  ) +
+  labs(fill = "Year")  # Set the legend title to "Year"
+
+
+# Display the plot
+p1
+
+
+# Print the plot
+print(p1)
+
+
+
+p1
+
+p2 <- p1 +
+  geom_point(aes(y = unique_individuals * (max(cootesfishway_summary$daily_detections) / 5)), 
+             shape = 1, size = 2, color = "black") +
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . / (max(cootesfishway_summary$daily_detections) / 5), name = "Number of Individuals"),  # Add second axis label
+    name = "Daily Detections"  # Label for the primary y-axis
+  ) +
+  theme(
+     axis.text.y = element_text(size = 12), 
+     axis.text.x=element_text(size=13),
+    axis.title.y.right = element_text(color = "black")  # Add color to the right axis title
+  )
+
+# Display the plot
+p2
+
+#now we need to summarize the number of detections per station_no as well as the number of unique individuals detected per day 
+
+HH_GConly_expanded <- HH_GConly %>%
+  group_by(rec_group, date = as.Date(detection_timestamp_utc), animal_id) %>%
+  summarize(daily_detections = n(), .groups = "drop") %>%
+  group_by(rec_group, date) %>%
+  mutate(unique_individuals = n_distinct(animal_id))
+
+
+as.factor(HH_GConly_expanded$animal_id)
+# Plot with independent y-axes
+library(ggplot2)
+
+p1 <- ggplot(HH_GConly_summary, aes(x = date)) +
+  geom_bar(aes(y = daily_detections), stat = "identity", fill = "lightgrey", width = 0.7) +
+  facet_wrap(~rec_group, ncol = 2, scales = "free_y") +
+  labs(x = "Date", y = "Daily Detections", 
+       title="2022") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.title.y.right = element_blank()  # Remove the right y-axis title
+  )
+
+p1
+# Overlay points for unique individuals
+p2 <- p1 +
+  geom_point(data = HH_GConly_expanded, 
+             aes(y = unique_individuals * (max(HH_GConly_summary$daily_detections) / 5), 
+                 color = factor(animal_id)),  # Convert to factor for discrete colors
+             shape = 16, size = 2) +
+  scale_y_continuous(sec.axis = sec_axis(~ . / (max(HH_GConly_summary$daily_detections) / 5), name = "Unique Individuals (0-5)")) +
+  scale_color_manual(values = scales::hue_pal()(length(unique(HH_GConly$animal_id)))) + 
+  guides(color = guide_legend(title = "Animal ID"))  # Add legend title
+
+p2
+
+# Print the combined plot
+print(p2)
+
+#plot is showing like 15 individuals right at april 1st so likely that they are staging even before this date. 
+#receiver wasnt deployed until then I would assume!
+
+
+GCmouthonly<-filter(HH_GConly_summary, rec_group=="GC Mouth")
+
+
+####2023
+
+H_GF_2022Ptagonly$detection_timestamp_utc <- as.POSIXct(HH_GF_2022Ptagonly$detection_timestamp_utc)
+
+#filter to include only detections that occured between april 1 2022 and June 30th 
+HH_GF_spring2023 <- HH_GF_2022Ptagonly %>%
+  filter(detection_timestamp_utc >= as.POSIXct("2023-03-01") &
+         detection_timestamp_utc <= as.POSIXct("2023-06-30"))
+
+#HAM-029, HAM-062, HAM-033, HAM-061, HAM-060, HAM-067, HAM-066, HAM-059
+
+HH_GF_Spring2023_GConly <- HH_GF_spring2023 %>%
+  filter(station_no %in% c("29", "62", "33", 
+                           "61", "60", "67", 
+                           "66", "59", "68"))
+
+
+unique(HH_GF_Spring2023_GConly$station_no)
+#now we need to summarize the number of detections per station_no as well as the number of unique individuals detected per day 
+HH_GF_Spring2023_summary <- HH_GF_Spring2023_GConly %>%
+  group_by(station_no, date = as.Date(detection_timestamp_utc)) %>%
+  summarize(
+    daily_detections = n(),  # Total number of detections per day per station
+    unique_individuals = n_distinct(animal_id)  # Number of unique individuals per day per station
+  ) %>%
+  ungroup()
+
+# Plot with independent y-axes
+library(ggplot2)
+
+library(ggplot2)
+library(ggplot2)
+
+# Calculate max daily detections beforehand
+max_detections <- max(HH_GConly_summary$daily_detections, na.rm = TRUE)
+
+HH_GConly_summary <- HH_GConly_summary %>%
+  mutate(rec_group = factor(rec_group, levels = c(
+    "GC Mouth", "sunfish pond", "second bridge gc", "blackbird pond", 
+    "osprey pond", "Plains rd. bridge", "first bend", "ds pond 1", 
+    "pond 2", "south pasture swamp bridge"
+  )))
+
+
+p1 <- ggplot(HH_GConly_summary, aes(x = date)) +
+  geom_bar(aes(y = daily_detections), stat = "identity", fill = "lightgrey", width = 0.7) +
+  facet_wrap(~rec_group, ncol = 2, scales = "free_y") +  # Ordered by the factor levels
+  labs(x = "Date", y = "Daily Detections", title = "2023") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.title.y.right = element_blank()
+  )
+
+# Overlay points for unique individuals using precomputed max_detections
+p2 <- p1 +
+  geom_point(aes(y = unique_individuals * (max_detections / 5)), 
+             shape = 1, size = 2, color = "black") +
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . / (max_detections / 5), name = "Unique Individuals (0-5)")
+  )
+
+# Print the combined plot
+print(p2)
+
+
+
+
+
+#check the locaiton of receiver 068
+
+
+unique(HH_GF_Spring2022_GConly$station_no)
+#now we need to summarize the number of detections per station_no as well as the number of unique individuals detected per day 
+HH_GF_Spring2022_summary <- HH_GF_Spring2022_GConly %>%
+  group_by(station_no, date = as.Date(detection_timestamp_utc)) %>%
+  summarize(
+    daily_detections = n(),  # Total number of detections per day per station
+    unique_individuals = n_distinct(animal_id)  # Number of unique individuals per day per station
+  ) %>%
+  ungroup()
+
+
+
+
+###############################
+###
+## Goldfish Grindstone abacus plots 
+##Feb 1st - July 1
+#temp and depth also 
+
+
+
+##########################################
+#abacus plots of GC plus with temperatuer and depth 
+
+
+###########################################################
+#GC receivers 2022
+# lower to upper
+#29 (GC mouth)
+#62 sunfsih pond
+#60 blackbird
+#68 GC bridge 2
+#61 osprey pond
+#33 GC 3rd bridge
+#66 pond 2
+#67 cherry trail 
+#59 top of GC
+
+#AND
+#63 Carrols bay pocket
+
+
+#lower to upper 2023
+#29 GC mouth
+#62 sunfish pond
+#60 blackbird
+#68 GC second bridge?
+#61 osprey
+#33 GC third bridge
+#66 pond 2
+#67 cherry trail
+#59 upper GC top 
+
+#AND 
+#63 Carrols bay pocket
+#70 inner Carrols bay
+
+
+#run the abacus plots with just the in river GC recs 
+#rename 
+#29 GC mouth
+#68 GC second bridge?
+#33 GC third bridge
+#67 cherry trail
+#59 upper GC top 
+
+
+
+
+#2022 data 
+
+#filter to include only detections that occured between april 1 2022 and June 30th 
+HH_GF_spring2022 <- HH_GF_2022Ptagonly %>%
+  filter(detection_timestamp_utc >= as.POSIXct("2022-03-01") &
+         detection_timestamp_utc <= as.POSIXct("2022-06-30"))
+#now just filter out to only include the GC receivers
+
+unique(HH_GF_spring2022$station_no)
+
+HH_GF_spring2022 <- HH_GF_spring2022 %>% filter(!animal_id %in% c("A69-9002-1388", 
+                                                                                          "A69-9006-9168", 
+                                                                                          "A69-9007-13681"))
+
+#HAM-029, HAM-062, HAM-033, HAM-061, HAM-060, HAM-067, HAM-066, HAM-059
+
+HH_GF_Spring2022_GConly <- HH_GF_spring2022 %>%
+  filter(station_no %in% c("29","33", 
+                           "67","59", "68"))
+
+HH_GF_Spring2022_GConly <- HH_GF_Spring2022_GConly %>%
+  mutate(location_name = case_when(
+    station_no == 29 ~ "GC mouth",
+    station_no == 68 ~ "Second bridge",
+    station_no == 33 ~ "Third bridge",
+    station_no == 67 ~ "Mid-upper GC",
+    station_no == 59 ~ "Upper GC",
+    TRUE ~ as.character(station_no) # Default case, keeps original ID if none match
+  ))
+
+#now make abacus plot
+
+
+
+unique(HH_GF_Spring2022_GConly$location_name)
+
+
+###abacus plots to check for dead fish 
+
+# Ensure the directory exists where you want to save the plots
+output_directory <- "C:/Users/TURNERN/Desktop/HH goldfish/telemetryR/"  # Change this to your desired directory
+if (!dir.exists(output_directory)) {
+  dir.create(output_directory)
+}
+
+# Get a list of unique animal_ids
+unique_animal_ids <- unique(HH_GF_Spring2022_GConly$animal_id)
+
+# Loop through each unique animal_id
+for (animal_id in unique_animal_ids) {
+  
+  # Filter the data for the current animal_id
+  filtered_data <- HH_GF_Spring2022_GConly[HH_GF_Spring2022_GConly$animal_id == animal_id, ]
+  
+  # Create the abacus plot
+  abacus_plot <- ggplot(filtered_data, aes(x = detection_timestamp_utc, y = factor(location_name))) +
+    geom_point(position = position_jitter(width = 0.1, height = 0), color = "blue") +  # Points with jitter
+    geom_line(aes(group = 1), color = "black") +  # Line connecting the points
+    labs(
+      x = "Detection Timestamp",
+      y = "Station Number",
+      title = paste("Goldfish:", animal_id)
+    ) +
+    scale_x_datetime(date_labels = "%b %Y") +  # Display month and year on the X-axis
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    ) +
+    geom_text(
+      aes(label = paste("Tagged:", capture_location, "\nDays:", detection_days)),
+      x = Inf, y = Inf,  # Positions at the edge of the plot
+      hjust = 1.1, vjust = 1,  # Adjust for a better fit
+      color = "black", size = 3,
+      check_overlap = TRUE
+    )
+
+  # Define the file name for the plot
+  file_name <- paste0("Goldfish_ID_", animal_id, ".png")
+
+  # Save the plot to the specified directory
+  ggsave(
+    filename = file.path(output_directory, file_name),
+    plot = abacus_plot,
+    width = 10, height = 6 , bg="white" # Adjust width and height as needed
+  )
+  
+  # Optionally print a message to indicate progress
+  print(paste("Saved plot for animal_id:", animal_id))
+}
+
+#check the locaiton of receiver 068
+
+##2023 data
+#2022 data 
+
+#filter to include only detections that occured between april 1 2022 and June 30th 
+HH_GF_spring2023 <- HH_GF_2022Ptagonly %>%
+  filter(detection_timestamp_utc >= as.POSIXct("2023-02-01") &
+         detection_timestamp_utc <= as.POSIXct("2023-06-30"))
+#now just filter out to only include the GC receivers
+
+unique(HH_GF_spring2022$station_no)
+
+HH_GF_spring2023 <- HH_GF_spring2023 %>% filter(!animal_id %in% c("A69-9002-1388", 
+                                                                                          "A69-9006-9168", 
+                                                                                          "A69-9007-13681"))
+
+#HAM-029, HAM-062, HAM-033, HAM-061, HAM-060, HAM-067, HAM-066, HAM-059
+
+HH_GF_spring2023 <- HH_GF_spring2023 %>%
+  filter(station_no %in% c("29","33", 
+                           "67","59", "68"))
+
+HH_GF_spring2023 <- HH_GF_spring2023 %>%
+  mutate(location_name = case_when(
+    station_no == 29 ~ "GC mouth",
+    station_no == 68 ~ "Second bridge",
+    station_no == 33 ~ "Third bridge",
+    station_no == 67 ~ "Mid-upper GC",
+    station_no == 59 ~ "Upper GC",
+    TRUE ~ as.character(station_no) # Default case, keeps original ID if none match
+  ))
+
+#now make abacus plot
+
+
+
+unique(HH_GF_spring2023$location_name)
+
+###LOCF
+colnames(HH_GConly)[colnames(HH_GConly) == "tag_serial_number"] <- "animal_id"
+
+
+HH_GConly_expanded <- HH_GConly %>%
+  group_by(rec_group, date = as.Date(detection_timestamp_utc), animal_id) %>%
+  summarize(daily_detections = n(), .groups = "drop") %>%
+  group_by(rec_group, date) %>%
+  mutate(unique_individuals = n_distinct(animal_id))
+
+
+as.factor(HH_GConly_expanded$animal_id)
+
+
+library(ggplot2)
+
+
+library(ggplot2)
+
+# Plot with independent y-axes
+
+
+library(ggplot2)
+unique(HH_GConly_summary$rec_group)
+HH_GConly_summary <- HH_GConly %>%
+  group_by(rec_group, date = as.Date(detection_timestamp_utc)) %>%
+  summarize(
+    daily_detections = n(),  # Total number of detections per day per station
+    unique_individuals = n_distinct(animal_id)  # Number of unique individuals per day per station
+  ) %>%
+  ungroup()
+
+HH_GConly_expanded <- HH_GConly %>%
+  group_by(rec_group, date = as.Date(detection_timestamp_utc), animal_id) %>%
+  summarize(daily_detections = n(), .groups = "drop") %>%
+  group_by(rec_group, date) %>%
+  mutate(unique_individuals = n_distinct(animal_id))
+unique(HH_GConly_expanded$rec_group)
+
+HH_GConly_expanded <- HH_GConly_expanded %>%
+  mutate(rec_group = factor(rec_group, levels = c(
+    "GC Mouth", "sunfish pond", "second bridge", "blackbird pond", 
+    "osprey pond", "Plains rd. bridge", 
+    "pond 2", "SPS bridge"
+  )))
+
+
+
+p1 <- ggplot(HH_GConly_summary, aes(x = date)) +
+  geom_bar(aes(y = daily_detections), stat = "identity", fill = "lightgrey", width = 0.7) +
+  facet_wrap(~rec_group, ncol = 2, scales = "free_y") +
+  labs(x = "Date", y = "Daily Detections", 
+       title="") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_text(color = "black"),
+    axis.title.y.right = element_blank()  # Remove the right y-axis title
+  )
+
+p1
+# Overlay points for unique individuals
+p2 <- p1 +
+  geom_point(data = HH_GConly_expanded, 
+             aes(y = unique_individuals * (max(HH_GConly_summary$daily_detections) / 5), 
+                 color = factor(animal_id)),  # Convert to factor for discrete colors
+             shape = 16, size = 2) +
+  scale_y_continuous(sec.axis = sec_axis(~ . / (max(HH_GConly_summary$daily_detections) / 5), name = "Unique Individuals (0-5)")) +
+  scale_color_manual(values = scales::hue_pal()(length(unique(HH_GConly$animal_id)))) + 
+  guides(color = guide_legend(title = "Animal ID"))  # Add legend title
+
+p2
+
+# Load the required package
+library(plotly)
+
+# Convert ggplot to an interactive plotly plot
+p2_plotly <- ggplotly(p2)
+
+# Display the interactive plot
+p2_plotly
+
+# Create a dataframe for grey periods
+grey_periods <- data.frame(
+  xmin = as.Date(c("2022-05-01", "2023-05-01", "2024-05-01")),
+  xmax = as.Date(c("2022-07-03", "2023-07-03", "2024-07-03"))
+)
+
+# Create the plot
+individuals_GC <- ggplot(HH_GConly_expanded, aes(x = date, y = factor(animal_id))) +
+  # Add grey bars from the grey_periods dataframe
+  geom_rect(data = grey_periods, 
+            aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf), 
+            fill = "grey60", alpha = 0.2, inherit.aes = FALSE) +
+  geom_point(color = "dodgerblue4",size=3) +  # Now add the main data
+  facet_wrap(~rec_group, ncol = 2, scales = "free_y") +
+  scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +  # Bi-monthly labels
+  labs(x = "Date", y = "Animal ID", fill = "Receiver Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 75, hjust = 1, size = 13), 
+        axis.text.y = element_text(size = 12))  # Rotate x-axis labels
+
+
+
+individuals_GC
+
+
+individuals_GC
+
+
+individuals_GC
+
+individuals_GC
+
+individuals_GC
+
+ggsave("individuals_GC.jpeg", plot = individuals_GC, width = 10, height = 10, dpi = 300, bg = "white")
+
+
+
+
+
+
+###############################
+###daily proportional activity across the entire array
+#subset for the spring of 2022 timeframe then subset for the grindstone receivers only 
+
+
+rec_props2022_2024_updated_spring2022 <- rec_props2022_2024_updated %>%
+  filter(date >= ("2022-03-01") &
+         date <= ("2022-06-30"))
+
+
+rec_props2022_2024_updated_spring2022_GConly <- rec_props2022_2024_updated_spring2022 %>%
+  filter(station_no %in% c("29", "62", "33", 
+                           "61", "60", "67", 
+                           "66", "59", "68", "59", "64", "86", "87"))
+
+unique(rec_props2022_2024_updated_spring2022_GConly$station_no)
+
+#  goldfish204_2$station %in% c("HAM-029", "HAM-033", "HAM-059", "HAM-060", "HAM-061", "HAM-062", "HAM-064", "HAM-066", "HAM-067", "HAM-068", "HAM-086", "HAM-087") ~ "Grindstone",
+
+######################
+  
+rec_props2022_2024_updated_spring2022_GConly$rec_group<-rec_props2022_2024_updated_spring2022_GConly$rec_group
+rec_props2022_2024_updated_spring2022_GConly$rec_group <- case_when(
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-029") ~ "Grindstone Creek Mouth",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-062") ~ "Sunfish pond",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-068") ~ "Grindstone Creek 2",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-060") ~ "blackbird pond",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-061") ~ "Osprey pond",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-033") ~ "Grindstone Creek 3",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-087") ~ "Grindstone Creek 4",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-066") ~ "Grindsotne Creek 5",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-067") ~ "pond 2",
+  rec_props2022_2024_updated_spring2022_GConly$station %in% c("HAM-059") ~ "Grindstone Creek 6",
+    TRUE ~ NA_character_ # Default to NA if no match
+)
+
+unique(rec_props2022_2024_updated_spring2022_GConly$rec_group)
+
+library(dplyr)
+
+rec_props2022_2024_updated_spring2022_GConly_summary <- rec_props2022_2024_updated_spring2022_GConly %>%
+  group_by(rec_group) %>%
+  summarise(
+    total_detected = sum(individuals_at_receiver, na.rm = TRUE),
+    total_at_large = sum(total_individuals, na.rm = TRUE),
+    proportion = total_detected / total_at_large
+  ) %>%
+  ungroup()
+
+
+
+rec_props2022_2024_updated_spring2023 <- rec_props2022_2024_updated %>%
+  filter(date >= ("2023-03-01") &
+         date <= ("2023-06-30"))

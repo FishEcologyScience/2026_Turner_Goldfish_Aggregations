@@ -1,0 +1,755 @@
+######################
+###
+### Hamilton Harbour 
+### Acoustic telemetry
+### Goldfish
+### maps: HH map, bubble plots, receiver locations etc. here 
+#######################
+library(rgdal)
+library(sp)
+library(sf)
+library(ggplot2)
+###need to convert to lat long from UTMS or points
+shorelinemap <- readOGR(dsn = "C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/LakeOntShoreline_MajorWaters.shp", 
+                        layer = "LakeOntShoreline_MajorWaters")
+
+
+
+plot(shorelinemap)
+
+shorelinemap1 <- st_as_sf(shorelinemap)
+
+map_NAD83 <- st_transform(shorelinemap1, crs = "+proj=longlat +datum=NAD83")
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+#map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+lakes <- st_as_sf(map_NAD83)
+plot(lakes)
+
+##choose great lakes shoreline - best detailed shapefile I have found for HH details
+shorelinemap <- st_read("LakeOntShoreline_MajorWaters.shp")
+plot(shorelinemap)
+
+###need to convert to lat long from UTMS or points
+target_crs <- st_crs("+proj=longlat +datum=NAD83")
+
+# Transform the shorelinemap object to the NAD83 CRS
+map_NAD83 <- st_transform(shorelinemap, target_crs)
+
+### NAD83 works best with GLATOS pkg but you can use other projections. 
+#map_WGS84 <-spTransform(shorelinemap, CRS("+proj=longlat +datum=WGS84"))
+
+lakes <- st_as_sf(map_NAD83)
+plot(lakes)
+
+##########
+shorelinemap_sf <- st_as_sf(shorelinemap)
+
+# Define the target CRS
+target_crs <- st_crs("+proj=longlat +datum=NAD83")
+
+# Transform the shorelinemap_sf object to the NAD83 CRS
+map_NAD83 <- st_transform(shorelinemap_sf, target_crs)
+
+#map for bubbleplots and animations
+##see shapefile_HH for map code
+#cootes paradise, Grindstone, west end harbour
+x_limits_HH <- c(-79.96, -79.76)  # Define your desired range for x-axis
+y_limits_HH <- c(43.25, 43.32)  # Define your desired range for y-axis
+
+#hamilton harbour
+x_limits_HHall <- c(-79.94, -79.78)  # Define your desired range for x-axis
+y_limits_HHall <- c(43.265, 43.315)  # Define your desired range for y-axis
+
+#GCzoom in 
+x_limits_GC <- c(-79.89, -79.86)  # Define your desired range for x-axis
+y_limits_GC <- c(43.28, 43.3)  # Define your desired range for y-axis
+
+##HH and lko
+x_limits_lko<- c(-79.90, -77) 
+y_limits_lko<- c(43.18, 44.0)
+
+plot(shorelinemap)
+
+#cootes and harbour
+X_limits_CPM_HH<-c(-79.9, -79.86) 
+y_limits_CPM_HH<-c(43.18, 44.0)
+
+#just cootes
+X_CPM<-c(-79.93, -79.89) 
+Y_CPM<-c(43.26, 43.29)
+
+
+#CPMmap
+CPM_HHmap<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group)) +
+  coord_cartesian(xlim = X_CPM, ylim = Y_CPM) +
+  theme_minimal()
+
+CPM_HHmap
+
+
+
+plot(shorelinemap)
+sf::st_crs(shorelinemap)
+# Plot the shapefile with specified x and y limits
+HHmap<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightgrey") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal()
+
+##############
+
+#editing the gc zoom in limits
+#GCzoom in 
+x_limits_GC_new <- c(-79.89, -79.875)  # Define your desired range for x-axis
+y_limits_GC_new <- c(43.285, 43.3)  # Define your desired range for y-axis
+
+
+GC<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightgrey") +
+  coord_cartesian(xlim = x_limits_GC_new, ylim = y_limits_GC_new) +
+  theme_minimal()
+
+GC
+
+
+create_map <- function(data, x_limits, y_limits) {
+  ggplot(data) +
+    geom_polygon(aes(x = long, y = lat, group = group)) +
+    coord_cartesian(xlim = x_limits, ylim = y_limits) +
+    theme_minimal()
+}
+
+HHmap <- create_map(shorelinemap, x_limits_HHall, y_limits_HHall, fill = "light blue")
+HHmap
+LKO <- create_map(shorelinemap)
+
+##
+###
+##################################################################
+############updated shapefile 
+library(sf)
+library(lwgeom)
+
+HH_gcmap <- st_read("C:/Users/TURNERN/Desktop/GIS/HH_Poly_Mar2025/HH_WaterlinesToPoly_21Mar2025.shp")
+
+
+HH_gcmap <- st_transform(HH_gcmap, crs = 4326)  # Convert to lat/lon if needed
+#this is a lingstring need to convert to a polygon feature 
+polygons_sf <- st_polygonize(HH_gcmap)
+plot(polygons_sf)
+
+
+
+
+HH<-ggplot()+
+  geom_sf(data=HH_gcmap, fill="lightblue")+
+  theme_minimal()
+
+
+HH
+
+x_limits_GC <- c(-79.888, -79.875)  # Define your desired range for x-axis
+y_limits_GC <- c(43.288, 43.299)  # Define your desired range for y-axis
+
+
+
+HH1 <- ggplot() +
+  geom_sf(data = HH_gcmap, fill="lightblue") +
+  coord_sf(xlim = x_limits_GC, ylim = y_limits_GC, expand = FALSE) +  # Set coordinate limits
+  theme_minimal()
+
+HH1  # Plot the map
+
+
+
+
+
+
+
+
+
+
+
+
+
+##HH and lko
+x_limits_lko<- c(-79.90, -77) 
+y_limits_lko<- c(43.18, 44.0)
+
+plot(shorelinemap)
+
+#cootes and harbour
+X_limits_CPM_HH<-c(-79.9, -79.86) 
+y_limits_CPM_HH<-c(43.18, 44.0)
+
+#just cootes
+X_CPM<-c(-79.93, -79.89) 
+Y_CPM<-c(43.26, 43.29)
+
+
+#CPMmap
+CPM_HHmap<-ggplot() +
+  geom_polygon(data = HH_gcmap, aes(x = X, y =Y)) +
+  coord_cartesian(xlim = x_limits_GC, ylim = y_limits_GC) +
+  theme_minimal()
+
+CPM_HHmap
+
+
+
+plot(shorelinemap)
+sf::st_crs(shorelinemap)
+# Plot the shapefile with specified x and y limits
+HHmap<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightgrey") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal()
+
+##############
+
+#editing the gc zoom in limits
+#GCzoom in 
+x_limits_GC_new <- c(-79.89, -79.875)  # Define your desired range for x-axis
+y_limits_GC_new <- c(43.285, 43.3)  # Define your desired range for y-axis
+
+
+GC<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightgrey") +
+  coord_cartesian(xlim = x_limits_GC_new, ylim = y_limits_GC_new) +
+  theme_minimal()
+
+GC
+
+##########bubble plot###########
+##
+
+GF13696 <- subset(GF, transmitter_id == '13696')
+GF13696$season<-as.factor(GF13696$season)
+unique(GF13696$season)
+
+detections_bubble_plottt<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "light blue") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal() + 
+  geom_point(data=GF202223tags, aes(x=deploy_long, y=deploy_lat))
+
+
+#########
+
+GF1390 <- subset(detectionsGF, transmitter_id == '1390')
+GF1390$season<-as.factor(GF1390$season)
+unique(GF13696$season)
+
+#
+
+detections_bubble_plottt<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "light blue") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal() + 
+  geom_point(data = GF1390, aes(x = deploy_long, y = deploy_lat, text = station_no), size = 2, color = "red")
+
+detections_bubble_plottt_interactive <- ggplotly(detections_bubble_plottt)
+
+# Display the interactive plot
+detections_bubble_plottt_interactive
+###receiver location maps 
+
+###map of receiver locations yearly 
+
+
+receiversHAM_WLN <- receivers %>%
+  filter(glatos_array %in% c('HAM', 'WLN'))
+
+
+write_rds(receiversHAM_WLN, "rec_locs_HHWLNonly.RDS")
+
+#load in receiver data for 2024
+setwd("C:/Users/TURNERN/Documents/Telemetry 2024data")
+
+library(data.table)
+unzip("HAMLO_20250110.zip", list = TRUE)
+receivers2024 <- fread("GLATOS_receiverLocations_20250109_212456.csv")
+
+##take out the HH recs only 
+receiversHAMWLN<-receivers2024 %>%
+  filter(glatos_array %in% c('HAM', 'WLN'))
+
+#see shapefile_HH for code to get map working
+Ham_harb<-ggplot(data = shorelinemap_sf) +
+  geom_sf(fill = "light blue") +
+  coord_sf(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal()
+lkomap 
+
+##GCMAP
+Ham_harb_GC<-ggplot(data = shorelinemap_sf) +
+  geom_sf(fill = "light blue") +
+  coord_sf(xlim = x_limits_GC, ylim = y_limits_GC) +
+  theme_minimal()
+
+#add in a deploy date and recovery date
+head(rec_locs_HHWLNonly$deploy_date_time)
+rec_locs_HHWLNonly$deploy_date_time <- as.POSIXct(rec_locs_HHWLNonly$deploy_date_time, 
+                                                tz="EST5EDT", 
+                                                format="%m/%d/%Y %H:%M")
+rec_locs_HHWLNonly$recover_date_time <- as.POSIXct(rec_locs_HHWLNonly$recover_date_time, 
+                                                tz="EST5EDT", 
+                                                format="%m/%d/%Y %H:%M")
+
+#add in a column for year 
+rec_locs_HHWLNonly$deploy_year <- format(as.Date(rec_locs_HHWLNonly$deploy_date_time), "%Y")
+rec_locs_HHWLNonly$recover_year <- format(as.Date(rec_locs_HHWLNonly$recover_date_time), "%Y")
+
+head(receiversHAM_WLN)
+
+
+##make an animation of this 
+#try a slider bar with plotyl?
+
+##different years 
+
+# Create the map with filtered data
+rec_2015 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2015)
+
+HHmapdep2015 <- Ham_harb +
+  geom_point(data = rec_2015, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value="magenta") +
+  labs(title = "Deployments in 2015, color= year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+#2016
+rec_2016 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2016)
+
+# Create the map with filtered data
+HHmap2016 <- Ham_harb +
+  geom_point(data = rec_2016, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployment locations 2016, color= year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+##2017
+rec_2017 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2017)
+
+# Create the map with filtered data
+HHmap2017 <- Ham_harb +
+  geom_point(data = rec_2017, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployments in 2017, color=year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+#recovery 
+
+
+
+##2018
+rec_2018 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2018)
+
+# Create the map with filtered data
+HHmap2018 <- Ham_harb +
+  geom_point(data = rec_2018, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployments in 2018, color=year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+#2019
+rec_2019 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2019)
+
+# Create the map with filtered data
+HHmap2019 <- Ham_harb +
+  geom_point(data = rec_2019, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployments in 2019, color=year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+#2020
+rec_2020 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2020)
+
+# Create the map with filtered data
+HHmap2020 <- Ham_harb +
+  geom_point(data = rec_2020, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployments in 2020, color=year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+##2021
+rec_2021 <- receiversHAM_WLN %>%
+  filter(deploy_year == 2021)
+
+# Create the map with filtered data
+HHmap2021 <- Ham_harb +
+  geom_point(data = rec_2021, aes(x = deploy_long, y = deploy_lat, color = factor(recover_year)), size = 3) +
+  scale_color_viridis_d(na.value = "magenta") +
+  labs(title = "Deployments in 2021,  color=year recovered",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+###2022
+rec_2022 <- rec_locs_HHWLNonly %>%
+  filter(deploy_year == 2022)
+rec_2022$station_no<-as.factor(rec_2022$station_no)
+
+# Create the map with filtered data
+HHmap2022 <- Ham_harb_GC +
+  geom_point(data = rec_2022, aes(x = deploy_long, y = deploy_lat), size = 1.5) +
+ # scale_color_viridis_d(na.value = "magenta") + # Only if using color in the aes of geom_point
+  geom_text_repel(data = rec_2022, aes(x = deploy_long, y = deploy_lat, label = station_no),
+                  segment.color = "grey50") +  # Adjust segment color as needed
+  labs(
+    title = "2022 Deployments",
+    x = "Longitude",
+    y = "Latitude",
+    color = "Year"
+  ) +
+  theme_minimal()
+
+#2023
+rec_2023 <- rec_locs_HHWLNonly %>%
+  filter(deploy_year == 2023)
+
+# Create the map with filtered data
+HHmap2023 <- Ham_harb_GC +
+  geom_point(data = rec_2023, aes(x = deploy_long, y = deploy_lat), size = 1.5) +
+  geom_text_repel(data = rec_2023, aes(x = deploy_long, y = deploy_lat, label = station),
+                  segment.color = "grey50") +  # Adjust segment color as needed
+  labs(title = "2023 Deployments",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+#all stations in the datafile that come up via detection between 2022 and 2023
+GF202223tags_wln <- GF202223tags %>%
+  filter(glatos_array %in% c('WLN'))
+library(dplyr)
+
+# Assuming your original dataframe is named `df`
+GF202223tags_new <- GF202223tags %>%
+  distinct(station_no, .keep_all = TRUE)
+
+HHmap2023 <- lkomap  +
+  geom_point(data = GF202223tags_new, aes(x = deploy_long, y = deploy_lat), size = 3, color="red") +
+  geom_text_repel(data = GF202223tags_new, aes(x = deploy_long, y = deploy_lat, label = station_no),
+                  segment.color = "white") +  # Adjust segment color as needed
+  labs(title = "2023 Deployments",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+
+#recovery 
+rec_recov2023 <- rec_2023 %>%
+  filter(recover_year == 2023)
+
+# Create the map with filtered data
+HHmapreco2023 <- Ham_harb +
+  geom_point(data = rec_recov2023, aes(x = deploy_long, y = deploy_lat, color = factor(deploy_year)), size = 3) +
+  scale_color_viridis_d() +
+  labs(title = "recovered in 2023",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+##2024
+receiversHAMWLN$deploy_year <- format(as.Date(receiversHAMWLN$deploy_date_time), "%Y")
+receiversHAMWLN$recover_year <- format(as.Date(receiversHAMWLN$recover_date_time), "%Y")
+
+rec_recov2024 <- receiversHAMWLN %>%
+  filter(recover_year == 2024)
+
+HHmapreco2024 <- Ham_harb +
+  geom_point(data = rec_recov2024, aes(x = deploy_long, y = deploy_lat, color = factor(deploy_year)), size = 3) +
+  scale_color_viridis_d() +
+  labs(title = "recovered in 2024",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+rec_2024 <- receiversHAMWLN %>%
+  filter(deploy_year == 2024, unique == "station_no")
+
+rec_2024_ham<-receiversHAMWLN %>%
+  filter(glatos_array == "HAM")
+
+HHmap2024 <- Ham_harb +
+  geom_point(data = rec_2024_ham, aes(x = deploy_long, y = deploy_lat), size = 1.5) +
+  geom_text_repel(data = rec_2024_ham, aes(x = deploy_long, y = deploy_lat, label = station),
+                  segment.color = "grey50") +  # Adjust segment color as needed
+  labs(title = "2024 Deployments",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+
+
+
+#station 28 and 27
+rec_2024_hamtwo <- receiversHAMWLN %>%
+  filter(station %in% c("HAM-028", "HAM-027"))
+unique(receiversHAMWLN$station_no)
+
+rec_24_tworecs<-rec_2024_hamtwo%>%
+  filter(deploy_year %in% c("2024"))
+
+HHmap2024 <- Ham_harb +
+  geom_point(data = rec_24_tworecs, aes(x = deploy_long, y = deploy_lat), size = 1.5) +
+  geom_text_repel(data = rec_24_tworecs, aes(x = deploy_long, y = deploy_lat, label = station),
+                  segment.color = "grey50") +  # Adjust segment color as needed
+  labs(title = "2024 Deployments",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+
+#####################
+#animations to get a better idea of movement patterns 
+#could to each fish as a different colour OR each tagging location as a differnt colour
+#will have to change the tagging location to be consistent
+unique(HH_GF_2022Ptagonly_deadfishremoved2023_1$release_latitude)
+#not as easy so skipping for now
+
+
+ as.data.frame(HH_GF_2022Ptagonly_deadfishremoved2023_1) 
+ HH_GF_2022Ptagonly_deadfishremoved2023_1$detection_timestamp_utc <- as.POSIXct(HH_GF_2022Ptagonly_deadfishremoved2023_1$detection_timestamp_utc, tz = "EDT")
+
+  pos <- interpolate_path(HH_GF_2022Ptagonly_deadfishremoved2023_1, int_time_stamp=86400/24)
+
+head(pos)
+#make each individual a diff colour
+n<-unique(pos$animal_id)
+col.rainbow<-rainbow(length(n))
+
+pos3<-data.frame()
+
+for (i in 1:length(n)){
+  
+  pos2<-pos[pos$animal_id==n[i],]
+  pos2$Colour<-col.rainbow[i]
+  
+  
+  pos3<-rbind(pos3,pos2)
+  
+}
+
+pos<-pos3
+unique(pos$animal_id)
+
+##shows a full coloured point if a true detection and not interpolation
+pos$fill<-ifelse(pos$record_type =="detection", 27,1)
+
+# convert pos2 to data.table
+setDT(pos)
+
+# extract unique bin_timestamp from the interpolated data
+int <- unique(pos, by = "bin_timestamp")
+
+setDF(pos)
+
+#one as an exmample 
+unique(pos$animal_id)
+
+GF_pos13682<-pos[pos$animal_id=='A69-9007-13682',]
+ GF_pos13682$bin_timestamp <- as.POSIXct(GF_pos13682$bin_timestamp)
+
+p<-ggplot(shorelinemap_sf) +
+  geom_sf(color = "black", fill = "lightgrey") +
+  coord_sf(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  #geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            # size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=GF_pos1394, aes(x=longitude, y=latitude,
+                           size=1), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+ # coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9163_redhill.gif")
+
+
+
+
+
+
+##all fish 
+p<-ggplot(data = Ham_harb) +
+  geom_sf(color = "black", fill = "lightgrey") +
+#  geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+ #            size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=pos, aes(x=longitude, y=latitude,
+                           group=animal_id, color=animal_id,
+                           size=record_type), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+  scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+p_anim <- animate(p, nframes = 200, fps = 4,renderer = gifski_renderer())
+
+anim_save("ruddall_HH_spawn2022_longer.gif", animation = p_anim)
+
+
+
+  
+  pos <- interpolate_path(rudd, int_time_stamp=86400/24)
+
+head(pos)
+#make each individual a diff colour
+n<-unique(pos$animal_id)
+col.rainbow<-rainbow(length(n))
+
+pos3<-data.frame()
+
+for (i in 1:length(n)){
+  
+  pos2<-pos[pos$animal_id==n[i],]
+  pos2$Colour<-col.rainbow[i]
+  
+  
+  pos3<-rbind(pos3,pos2)
+  
+}
+
+pos<-pos3
+unique(pos$animal_id)
+
+##shows a full coloured point if a true detection and not interpolation
+pos$fill<-ifelse(pos$record_type =="detection", 16,1)
+
+# convert pos2 to data.table
+setDT(pos)
+
+# extract unique bin_timestamp from the interpolated data
+int <- unique(pos, by = "bin_timestamp")
+
+##need receiver location data
+####load receivers from GLATOS file. This is provided with GLATOS query
+#receivers<-read_glatos_receivers("C:/Users/TURNERN/Desktop/RUDD/telem/Telem_forR/GLATOS_receiverLocations_20240122_234632.csv")
+
+setDT(GLATOS_receiverLocations_20240122_234632) # convert to data.table object- necessary for sf package
+
+
+recs_sf <- st_as_sf(GLATOS_receiverLocations_20240122_234632, coords = c("deploy_long", "deploy_lat"), crs = 4326) 
+# Add bin_timestamp to receivers, based on deploy/recover timestamps.
+# Removes unnecessary columns in output to simplify
+# This is a data.table non-equi join...
+
+
+
+##shoud also do an animation of receiver deployment over the years of the study (would be good for shiny)
+
+
+#spring 2022
+
+New_bindedproportions1_spawning2023<-New_bindedproportions1[New_bindedproportions1$date >= "2023-04-15" & 
+                                                                       New_bindedproportions1$date <= "2023-06-30",]
+
+
+
+
+detections_bubble_plottt_spring2022<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2022, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+# To render the animation
+proportions1<-animate(detections_bubble_plottt, renderer = gifski_renderer())
+#save as a av file
+library(av)
+
+proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("proportion_rec_spring2022.mp4", 
+          animation = detections_bubble_plottt_spring2022, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+             
+  ##spring 2022
+
+New_bindedproportions1_spring2023<-New_bindedproportions1[New_bindedproportions1$date >= "2023-02-28" & 
+                                                                       New_bindedproportions1$date <= "2023-06-30",]
+
+
+
+#entire time series we want to use (up until 2023)
+
+detections_bubble_plottt_spring2023<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2023, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+
+
+
+
+
+
+
+

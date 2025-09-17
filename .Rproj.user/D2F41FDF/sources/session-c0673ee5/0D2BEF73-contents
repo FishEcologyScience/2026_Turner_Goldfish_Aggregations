@@ -1,0 +1,87 @@
+#ideas and quick run throughs of some data analysis goldfish aggregation data carrolls bay April 2025
+
+#multiple dataframes 
+#1. Occurances of goldfish/goldfish aggregations 
+#2. transect sampling details
+#3. also the weight/length and batch data (likely not applicable here)
+
+#whats in each dataframe?
+#1. occurances, presences only of goldfish with transect,lat/lon
+#if an "aggregation was determined to be present, extra water quality info was recorded
+#including temp, DO, turbidity, water depth
+
+#2. transect sampling details
+#efishing setting details
+#water quality at the start or end of the transect (was not standardized), including
+#temp, DO, conductivity, turbidity, pH, and a depth value
+
+#things that need to be fixed
+#1. depth, wasnt always taken and could vary between the start and end of the transect
+#thinking about just using the bathy layer Jon has to assign depths to transects and aggregation points
+
+
+#QUESTION
+#using telemetry data we were able to focus efforts into a specific area during a specific time period
+#this deemed successful as aggregations of goldfish were found and we were able to remove 
+sum(Aggdata_June52025$`Number missed`, na.rm = TRUE)
+#TOTAL=787 goldfish
+#number captured = 642
+#number missed = 145
+#also likely more that were missed that were not counted due to poor water clarity 
+
+# to put into perspective, we removed MORE adult goldfish (in 4 days) than RBG removed at the fishway in 
+#both 2022 and 2023 (567 total)
+
+
+
+#####
+#things we need to add to the dataset. 
+#1. distance to shoreline 
+#2. distance to rivermouth
+
+#1. Gathering a distance to shoreline variable for each goldfish occurance 
+
+# Load required libraries
+library(sf)
+library(dplyr)
+library(units)
+
+# Assuming your data is already loaded:
+# points_data <- your point dataset (sf object)
+# shoreline_polygon <- your shoreline polygon (sf object)
+# river_mouths <- your river mouth points (sf object)
+
+# Make sure all data has the same CRS (coordinate reference system)
+# Check CRS
+GF_locs <- st_as_sf(Aggdata_June52025, coords = c("Lon", "Lat"), crs = 4326)
+
+st_crs(GF_locs)
+st_crs(shorelinemap)
+
+# ===============================
+# 1. Distance to Shoreline
+# ===============================
+
+# Convert shoreline polygon to boundary
+shoreline_boundary <- st_boundary(shorelinemap)
+# Calculate distance from points to shoreline boundary
+dist_to_shore <- st_distance(GF_locs, shoreline_boundary)
+# Extract distances
+Aggdata_June52025$dist_to_shoreline_m <- as.numeric(dist_to_shore[,1])
+colnames(GF_locs)
+# ===============================
+# 2. Distance to River Mouth
+# ===============================
+#add in a point that defines the location of the river mouth 
+river_mouth_lat <- 43.289567
+river_mouth_lon <- -79.887236
+
+GF_locs <- st_as_sf(Aggdata_June52025, coords = c("Lon", "Lat"), crs = 4326)
+
+river_mouth_sf <- st_sfc(st_point(c(river_mouth_lon, river_mouth_lat)), 
+                         crs = 4326)
+
+distances_m <- st_distance(GF_locs, river_mouth_sf)
+Aggdata_June52025$distance_to_river_mouth_m <- as.numeric(distances_m)
+
+

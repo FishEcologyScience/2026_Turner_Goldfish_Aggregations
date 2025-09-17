@@ -1,0 +1,427 @@
+##hurdle models for goldfish management report
+library(plyr)
+library(lattice)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(naniar)
+library (readr)
+library(lme4)
+library(car)
+library(lmerTest)
+library(performance)
+library(lsmeans)
+library(multcomp)
+library(multcompView)
+library(ggplot2)
+library(rstatix)
+library(ggpubr)
+library(glmmTMB)
+library(DHARMa)
+library(broom)
+library(broom.mixed)
+library(TMB)
+  library(glmmTMB)
+library(rlang)
+
+
+
+##########################################
+##goldfish by year for goldfish manangement report just P3 and P4 
+
+##need to add temp into the dataframe 
+#Where the temp data is located
+
+setwd("C:/Users/TURNERN/Desktop/HH goldfish")
+
+#hamharb2023transects_withtempcolumn.csv
+
+#need to scale the temp data 
+
+hamh_2023transects$temp_c<-as.numeric(hamh_2023transects$temp_c)
+hamh_2023transects$Temp.Scale<-scale(hamh_2023transects$temp_c)
+
+hamh_gf<-dplyr::filter(refsites_filtered, Common_Name %in% c("Goldfish"))
+ham_gf1<-dplyr::filter(hamh_gf, AOCGroup %in% c("AOC"))
+
+#just filter down to what we need to we can just stack the dataframes on top of one another
+hamgf2<-ham_gf1[c(1,4,8,10,12,14,19)]
+colnames(hamgf2)
+
+#ham2023transects
+colnames(hamh_2023transects)
+#just need to isolate for date station and temp.scale match it up to the missing file
+
+hamh_2023transects$Transect<-hamh_2023transects$STATION_ID
+hamh_2023transects$Date<-hamh_2023transects$START_DATE
+unique(refsites_filtered$Year)
+
+GF_HHonly2023_P3P4$Date <- as.Date(GF_HHonly2023_P3P4$Date, format = "%Y-%m-%d")
+hamh_2023transects$Date <- as.Date(hamh_2023transects$Date, format = "%Y-%m-%d")
+refsites_filtered$Date<-as.Date(refsites_filtered$Date, format = "%m/%d/%Y")
+
+#take the refsites filtered and make a subset dataframe with hust transect, date, and tempscale
+#then do the same of the 2023 data to fill inthe NAs to that dataframe 
+
+#then bind that dataframe to the GF_hhonly2023
+
+refsites_filtered<-dplyr::filter(refsites_filtered, AOCGroup %in% c("AOC"))
+refsites_subset<-refsites_filtered[c(11, 12,13 )]
+
+hamh_2023transects_subset <- hamh_2023transects_subset %>%
+  rename(Date = START_DATE, Temp.Scale = Temp.Scale)
+
+combined_data <- bind_rows(refsites_subset, hamh_2023transects_subset)
+GF_HHonly2023 <- GF_HHonly2023 %>%
+  mutate(Date = as.Date(Date))
+
+GF_HHonly2023_with_temp <- GF_HHonly2023 %>%
+  left_join(
+    combined_data %>% rename(Temp_Scale = Temp.Scale),
+    by = c("Transect", "Date")
+  ) %>%
+  mutate(Temp_Scale = if_else(is.na(Temp_Scale), NA, Temp_Scale)) 
+
+#hhbase dataset folder
+write.csv(combined_data, "tempdata_upto2023_hh.csv")
+
+#gf data with temp.scale up to date for 2023
+write.csv(GF_HHonly2023_with_temp, "tempdata_GF_upto2023.csv")
+
+head(GF_HHonly2023)
+
+
+
+#get 2023 data
+hamh_2023transects_subset<-hamh_2023transects[c(3,5,6)]
+hamh_2023transects_subset$Temp.Scale<-hamh_2023transects_subset$STATION_ID
+head(hamh_2023transects_subset)
+head(refsites_subset)
+###goldfish hamilton harbour sites only ##
+
+GF_HHonly2023<-dplyr::filter(HH_efish2023.random.2, Common_Name %in% c("Goldfish"))
+unique(GF_HHonly2023$AOCGroup)
+#GF_AOConly<-dplyr::filter(GF_HHonly,AOCGroup  %in% c("AOC"))
+GF_HHonly2023_P3P4<-dplyr::filter(GF_HHonly2023, Stanza %in% c("P3: 2006-2012", "P4: 2013-2021"))
+GF_HHonly2023_P3P4_GF_hamP4<-dplyr::filter(GF_HHonly2023_P3P4, Stanza %in% c("P4: 2013-2021"))
+colnames(GF_HHonly2023_P3P4_GF_hamP4)
+
+GF_HHonly2023_P3P4$Year<-as.factor(GF_HHonly2023_P3P4$Year)
+
+colnames(GF_HHonly2023_P3P4)
+
+p <- ggplot(GF_HHonly2023_P3P4, aes(x=Year, y=Abundance)) +
+  geom_col() + 
+  xlab("")
+p
+
+colnames(GF_HHonly2023_with_temp)
+"Transect" %in% colnames(GF_HHonly2023_with_temp)
+GF_HHonly2023_with_temp$Transect <- as.factor(GF_HHonly2023_with_temp$Transect)
+
+GF_HHonly2023_with_temp <- GF_HHonly2023_with_temp %>%
+  select(Transect, Year, Temp_Scale, Abundance, fTime.Period)
+
+colnames(tempdata_GF_upto2023)[colnames(tempdata_GF_upto2023) == "Transect"] <- "Transect"
+colnames(tempdata_GF_upto2023)
+str(tempdata_GF_upto2023)
+
+tempdata_GF_upto2023$Year <- factor(tempdata_GF_upto2023$Year)
+
+install.packages("glmmTMB")
+
+gf<-dplyr::filter(refsites_filtered, Common_Name %in% c("Goldfish"))
+
+gf_hh<-dplyr::filter(gf, AOCGroup %in% c("AOC" ))
+
+#keep data from 2006 onwards
+tempdata_GF_upto2023$Year <- as.numeric(as.character(tempdata_GF_upto2023$Year))
+unique(tempdata_GF_upto2023$Year)
+
+tempdata_2006_2023 <- dplyr::filter(tempdata_GF_upto2023, !(Year <= 2010))
+unique(tempdata_2006_2023$Year)
+
+tempdata_2006_2023$Year <- factor(tempdata_2006_2023$Year)
+unique(tempdata_2006_2021$Year)
+
+gf_hh_2008onwards$Transect<-as.character(tempdata_2006_2023$Transect)
+
+
+
+###testing out the 2023 dataframe to just be the same dataframe as what we already have to see if the model will run
+##new dataframe 
+
+tempdata_2006_2023$Year <- as.numeric(as.character(tempdata_2006_2023$Year))
+unique(tempdata_2006_2023$Year)
+
+#exclude 2022 and 2023 keep the rest
+tempdata_2006_2021_newdataframe <- dplyr::filter(tempdata_2006_2023, !(Year %in% c(2022:2023)))
+unique(tempdata_2006_2021_newdataframe$Year)
+#worked so now convreting abck to factor and then runnign the model
+tempdata_2006_2021_newdataframe$Year <- factor(tempdata_2006_2021_newdataframe$Year)
+
+#run model 
+#new data with temp included and up to 2023
+#2022 and 2023 have been removed as a test to see if the model will run with this specific dataset
+#it does run... 
+
+#lets do the new dataframe tahtgoes up until 2023 but start at P4 2013
+tempdata_2006_2023$Year <- as.numeric(as.character(tempdata_2006_2023$Year))
+unique(tempdata_2013_2023$Year)
+
+tempdata_2013_2023 <- dplyr::filter(tempdata_2006_2023, Year %in% c(2013, 2016, 2018, 2019, 2020, 2021, 2023))
+tempdata_2013_2023$Year <- factor(tempdata_2013_2023$Year)
+
+
+#remvove the nas from the temp scale column
+tempdata_2006_2023_updated <- tempdata_2006_2023[is.finite(tempdata_2006_2023$Temp_Scale), ]
+unique(tempdata_2006_2023_updated$Year)
+
+colnames(tempdata_2006_2023)
+
+updatedhurdle_GF2023 = glmmTMB(
+  Abundance ~ Year + Temp_Scale + (1 | Transect) + (1 | fTime.Period),
+  zi = ~ Year + Temp_Scale,
+  data = tempdata_2006_2023_updated,
+  family = ziGamma(link = "log")
+)
+
+##troubleshooting the data 
+summary(tempdata_2006_2023_updated)
+str(tempdata_2006_2023_updated)
+
+tempdata_2006_2023_updated$Year <- as.factor(tempdata_2006_2023_updated$Year)
+tempdata_2006_2023_updated$fTime.Period <- as.factor(tempdata_2006_2023_updated$fTime.Period)
+tempdata_2006_2023_updated$Transect <- as.factor(tempdata_2006_2023_updated$Transect)
+
+boxplot(tempdata_2006_2023_updated$Temp_Scale)
+boxplot(tempdata_2006_2023_updated$Abundance)
+cor(tempdata_2006_2023_updated[sapply(tempdata_2006_2023_updated, is.numeric)], use = "complete.obs")
+#fit without a random efffect 
+
+
+
+
+##################################
+###
+#hurdle model from old dataset working (2006-2021)
+#compare the new dataframe to the old why, model is converging, why?
+tempdata_2013_2021 <- dplyr::filter(tempdata_2006_2023, Year %in% c(2013, 2016, 2018, 2019, 2020, 2021))
+
+colnames(gf_hh_2008onwards)
+
+gf_2021 = glmmTMB(
+  Abundance ~ Year + Temp_Scale + (1 | Transect) + (1 | fTime.Period),
+  zi = ~ Year + Temp_Scale,
+  data = tempdata_2013_2021,
+  family = ziGamma(link = "log")
+)
+
+
+
+Anova(HM_refonly_AOC_GF_yearly)
+
+simulationoutput_spec<-simulateResiduals(fittedModel=gf_2021,quantreg=T)
+
+#residuals vs. predicated = quantile deviations detected 
+plot(simulationoutput_spec, quantreg=T)
+testUniformity(simulationoutput_spec)
+
+
+marginal_refonlyreg_GF_year2021= lsmeans(gf_2021,~Year+Temp_Scale, type="response")
+
+letter.comp_GF_refonly_reg_year<-cld(marginal_refonlyreg_GF_year2021,
+                 alpha   = 0.05,
+                 Letters = letters,     ### Use lower-case letters for .group
+                 adjust  = "Tukey") 
+
+library(ggplot2)
+library(patchwork)
+
+# First plot (p)
+p <- ggplot() +
+  theme_bw(base_size = 15) +
+  theme(axis.title = element_text(face = "bold"), 
+        legend.position = "right", 
+        axis.text = element_text(size = 20), 
+        axis.text.x = element_text(angle = 75, hjust = 1)) +
+  geom_point(data = letter.comp_GF_refonly_reg_year, 
+             aes(x = Year, y = lsmean), 
+             shape = 15, size = 6, position = position_dodge(0.7), color = "darkslategrey") +
+  geom_errorbar(data = letter.comp_GF_refonly_reg_year, 
+                aes(x = Year, ymin = asymp.LCL, ymax = asymp.UCL), 
+                width = 0.5, size = 1.5, position = position_dodge(0.7), color = "darkslategrey") +
+  labs(x = "Year", y = "Catch") +
+  geom_text(data = letter.comp_GF_refonly_reg_year, 
+            aes(x = Year, label = .group, y = asymp.UCL), 
+            position = position_dodge(0.7), vjust = -0.5, size = 6) +
+  ylim(0, 11)
+
+# Second plot (pp)
+pp <- ggplot() +
+  theme_bw(base_size = 15) +
+  theme(axis.title = element_text(face = "bold"), 
+        legend.position = "right", 
+        axis.text = element_text(size = 20), 
+        axis.text.x = element_text(angle = 75, hjust = 1)) +
+  geom_point(data = letter.comp_GFish_ZIB, 
+             aes(x = Year, y = response_new), 
+             shape = 15, size = 6, position = position_dodge(0.5), color = "darkslategrey") +
+  geom_errorbar(data = letter.comp_GFish_ZIB, 
+                aes(x = Year, ymin = pmax(UCL_new, 0), ymax = pmin(LCL_new, 1)), 
+                width = 0.5, size = 1.5, position = position_dodge(0.5), color = "darkslategrey") +
+  labs(x = "Year", y = "Probability of catch") +
+  geom_text(data = letter.comp_GFish_ZIB, 
+            aes(x = Year, label = .group, y = pmax(UCL_new, 0)), 
+            vjust = -0.5, position = position_dodge(0.5), size = 6) +
+  scale_y_continuous(limits = c(0, 1)) +
+  guides(color = guide_legend(title = NULL))
+
+# Stack the plots with annotations
+p + pp + 
+  plot_annotation(tag_levels = 'A') 
+
+
+HM3_LMB_eastreftest = glmmTMB(Abundance~Stanza*Zone.Split + Temp.Scale+ (1|Transect)+(1|fTime.Period),
+                           zi=~Stanza*Zone.Split+Temp.Scale, LMB,
+                   family=ziGamma(link="log") )
+
+
+#########then see if we can get a break down by the zones for all the years NO does not work 
+#model convergence problem!!
+
+
+
+###################RBG barrier data hurdle model ####################################
+
+
+col_names(goldfish_presence_absence)
+
+GF_HHonly<-dplyr::filter(refsites_filtered, Common_Name %in% c("Goldfish"))
+unique(GF_HHonly$AOCGroup)
+GF_AOConly<-dplyr::filter(GF_HHonly,AOCGroup  %in% c("AOC"))
+GF_hamP3P4<-dplyr::filter(GF_AOConly, Stanza %in% c("P3: 2006-2012", "P4: 2013-2021"))
+GF_hamP4<-dplyr::filter(GF_AOConly, Stanza %in% c("P4: 2013-2021"))
+colnames(GF_hamP3P4)
+
+unique(GF_AOConly$Year)
+
+
+
+
+GF_hamP3P4$Year<-as.factor(GF_hamP3P4$Year)
+
+p <- ggplot(GF_hamP3P4, aes(x=Year, y=Abundance)) +
+  geom_col() + 
+  xlab("")
+p
+
+#need to add season to the dataframe 
+goldfish_presence_absence <- goldfish_presence_absence %>%
+  mutate(
+    Date_Formatted = dmy(Date),        # Convert to Date format
+    Month = month(Date_Formatted, label = TRUE)  # Extract month as a factor with month names
+  )
+
+goldfish_presence_absence <- goldfish_presence_absence %>%
+  mutate(
+    Season = case_when(
+      Month %in% c("Dec", "Jan", "Feb") ~ "Winter",
+      Month %in% c("Mar", "Apr", "May") ~ "Spring",
+      Month %in% c("Jun", "Jul", "Aug") ~ "Summer",
+      Month %in% c("Sep", "Oct", "Nov") ~ "Fall",
+      TRUE ~ NA_character_ # Handle unexpected values
+    )
+  )
+
+RBG_fishway_2000plus$Year<-as.factor(RBG_fishway_2000plus$Year)
+RBG_fishway_2000plus$Season<-as.factor(RBG_fishway_2000plus$Season)
+
+RBG_fishway_2000plus<-filter(goldfish_presence_absence, Year >=2000)
+
+RBG_goldfish_fishway = glmmTMB(Quantity~Year + (1|`Basket #`)+(1|`Lift Time`),
+                           zi=~Year+Season, data=RBG_fishway_2000plus,
+                   family=ziGamma(link="log") )
+
+
+
+Anova(RBG_goldfish_fishway)
+
+simulationoutput_spec<-simulateResiduals(fittedModel=RBG_goldfish_fishway,quantreg=T)
+
+#residuals vs. predicated = quantile deviations detected 
+plot(simulationoutput_spec, quantreg=T)
+testUniformity(simulationoutput_spec)
+
+
+RBG_GF= lsmeans(RBG_goldfish_fishway,~Year, type="response")
+
+RBG_GF.letter.comp<-cld(RBG_GF,
+                 alpha   = 0.05,
+                 Letters = letters,     ### Use lower-case letters for .group
+                 adjust  = "Tukey") 
+
+
+#plotting with standard errors 
+p <- ggplot() 
+pd = position_dodge(.7)
+p <- p + theme_bw(base_size = 15) 
+p <- p + theme(axis.title = element_text(face = "bold"),legend.position="right")  
+p<-   p+ theme(axis.text = element_text(size=20), axis.text.x = element_text(angle = 75, hjust = 1))
+#p <- p + geom_point(data=GF_hamP3P4, aes(x =Year, y = Abundance), shape=1,alpha=0.2, size=1, position=pd)
+p <- p + geom_point(data=RBG_GF.letter.comp, aes(x =Year, y = lsmean,
+                                          ), shape=15, size=6, position=pd, color = "darkslategrey")
+p
+
+p <- p + geom_errorbar(data=RBG_GF.letter.comp,aes(x=Year,ymin=asymp.LCL,
+                                            ymax=asymp.UCL),width=0.5, size=1.5, position=pd, color = "darkslategrey") 
+#p <- p + scale_color_manual(values=c("deepskyblue4", "darkorange2","darkred","darkolivegreen4"))
+p <- p + labs(x = "Year", y = "Mean Catch") 
+p <- p + geom_text(data=RBG_GF.letter.comp,aes(x=Year,label = .group, y = asymp.UCL),position=pd, vjust=-0.5,size=6)
+p<- p+ggtitle("RBG fishway")
+p <- p + ylim(0,11)
+p
+
+#working but data is not normal need to look into this or drop some years???
+write.csv(goldfish_presence_absence, "GF_PA_fishway2023_seasonmonth.csv")
+
+############catchability 
+
+marginal_refonlyreg_GF_year= lsmeans(HM_refonly_AOC_GF_yearly,~Year+Temp.Scale, type="response")
+
+m1arginal_GF_eastref_ZIB= lsmeans(HM_refonly_AOC_GF_yearly,~Year+Temp.Scale, type="response",component="zi")
+
+
+letter.comp_GFish_ZIB<-cld(m1arginal_GF_eastref_ZIB,
+                 alpha   = 0.05,
+                 Letters = letters,     ### Use lower-case letters for .group
+                 adjust  = "Tukey") 
+
+letter.comp_GFish_ZIB$response_new<-1-letter.comp_GFish_ZIB$lsmean
+letter.comp_GFish_ZIB$UCL_new<-1-letter.comp_GFish_ZIB$asymp.LCL
+letter.comp_GFish_ZIB$LCL_new<-1-letter.comp_GFish_ZIB$asymp.UCL
+
+
+p <- ggplot() 
+pd = position_dodge(.5)
+p <- p + theme_bw(base_size = 15) 
+p <- p + theme(axis.title = element_text(face = "bold"),legend.position="right")  
+p<-   p+ theme(axis.text = element_text(size=20), axis.text.x = element_text(angle = 75, hjust = 1))
+#p <- p + geom_point(data=LMB_eastref, aes(x =Stanza, y = Abundance,color=Zone.Split), shape=1,alpha=0.2, size=1, position=pd)
+p <- p + geom_point(data=letter.comp_GFish_ZIB, aes(x =Year, y = response_new,
+                                          ), shape=15, size=6, position=pd, color = "darkslategrey")
+p
+
+p <- p + geom_errorbar(data=letter.comp_GFish_ZIB,aes(x=Year,ymin=ifelse(UCL_new >10,10,UCL_new ),
+                                            ymax=LCL_new),width=.5, size=1.5, position=pd,show.legend = FALSE, color = "darkslategrey") 
+
+p <- p + scale_color_manual(values=colors)
+
+p <- p + labs(x = "Year", y = "Probability of catch") 
+p <- p + geom_text(data=letter.comp_GFish_ZIB,aes(x=Year,label = .group, y = ifelse(UCL_new>10,10,UCL_new)), vjust = -0.5,position=pd, size=6,show.legend = FALSE)
+p<- p+ggtitle("DFO survery")
+p <- p+ guides(color = guide_legend(title = NULL))
+  p<-p+scale_y_continuous(limits=c(0,1))
+p
+

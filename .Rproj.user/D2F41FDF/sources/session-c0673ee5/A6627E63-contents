@@ -1,0 +1,586 @@
+
+#########################
+
+##QAQC Hamharb telemetry data for management report ##
+
+##
+setwd("C:/Users/TURNERN/Desktop/HH goldfish/telemetryR/Jan2025")
+
+#############
+library(readxl)
+library(glatos)
+###newest version is 0.5.0
+library(maptools)
+library(rgdal)
+library(rgeos)
+library(gdalUtils)
+library(lubridate)
+library(raster)
+library(sp)
+library(pacman)
+library(plyr)
+library(dplyr)
+library(reshape2)
+library(data.table)
+library(reshape)
+library(ctmm)
+library(move)
+library(ggplot2)
+library(distr)
+library(suncalc)
+library(lunar)
+library(ggnewscale)
+library(nlme)
+library(car)
+library(emmeans)
+library(multcompView)
+library(lme4)
+library(multcomp)
+library(scales)
+###################
+setwd("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish")
+detectionsGFGF<-readRDS("./detections_filtered_2015-2025_goldfishonly.rds")
+#this file is pulling out all the goldsih with pressure temp tags as duplicates in some cases do not use
+unique(detectionsGFGF$SensorType)
+unique(detectionsGFGF$transmitter_id)
+
+
+#only want to keep fish that were tagged in 2021 to current
+
+detectionsGFGF<- detectionsGFGF %>% filter(EST_release_date_time>"2021-01-01 00:00:00")
+unique(detectionsGFGF$SensorType)
+
+#fix station duplicates
+
+detectionsGFGF$station_no[detectionsGFGF$station=="HAM-026"] <-"37"
+detectionsGFGF$station_no[detectionsGFGF$station=="HAM-016"] <-"11"
+detectionsGFGF$station[detectionsGFGF$station=="HAM-026"] <-"HAM-037"
+detectionsGFGF$station[detectionsGFGF$station=="HAM-016"] <-"HAM-011"
+detectionsGFGF$station_no[detectionsGFGF$station=="HAM-020"] <-"39"
+detectionsGFGF$station[detectionsGFGF$station=="HAM-020"] <-"HAM-039"
+##################
+#station locations
+stationsummary<-detectionsGFGF %>%
+  distinct(station_no, year, deploy_lat,deploy_long)
+
+receiver_count <- stationsummary %>%
+  group_by(year, station_no) 
+#### now to add some variables to the dataset
+
+### Day of Year ##
+detectionsGFGF$doy<- strftime(detectionsGFGF$detection_timestamp_EST, format = "%j")
+detectionsGFGF$doy<-as.numeric(detectionsGFGF$doy)
+
+detectionsGFGF$gen_season<-NA
+
+detectionsGFGF$gen_season<-
+  ifelse((detectionsGFGF$doy > 110) & (detectionsGFGF$doy<=161 ), "Spring",  #april 20th
+         ifelse((detectionsGFGF$doy > 161) & (detectionsGFGF$doy<=274 ), "Summer",  #june 10th
+                ifelse((detectionsGFGF$doy > 274) & (detectionsGFGF$doy<=324 ), "Fall", #oct 1st
+                       ifelse((detectionsGFGF$doy > 324), "Winter",  #nov 20th
+                              ifelse((detectionsGFGF$doy<=110 ), "Winter",NA)))))
+
+
+detectionsGFGF$year<-as.numeric(format(detectionsGFGF$detection_timestamp_EST,"%Y"))
+
+####label whether in or out of harbour ####
+detectionsGFGF$harbourpresence<-NA
+detectionsGFGF$harbourpresence<-ifelse(detectionsGFGF$glatos_array=="HAM", "In","Out")
+
+unique(detectionsGFGF$SensorType)
+
+#for some reason animal_id is never assigned, ask SL.
+#for now do this to get info added to the animal_id column
+library(dplyr)
+
+detectionsGF1 <- detectionsGFGF %>%
+  mutate(animal_id = ifelse(is.na(animal_id), paste(transmitter_codespace, transmitter_id, sep = "-"), animal_id))
+
+unique(detectionsGF1$SensorType)
+
+##saving this updated file now 
+unique(detectionsGF$station)
+summary(detectionsGF)
+###########
+##########
+
+###QAQC the goldfish data for dead and alive fish, clip off any data were tags are sitting (i.e dead) etc.
+
+#plot depth and abacus plots for remaining fish
+
+##depth series plots - to QAQC mortalities/depth sensor errors, and visualize the data available.
+###subset for fish that have detectionsGF since last QAQC
+
+#fish_plot<-detectionsGF1 %>% group_by(Tag.SN) %>% summarise(n=n_distinct(detection_timestamp_EST), maxtime=max(detection_timestamp_EST)) 
+#fish_plot <-fish_plot %>% filter(maxtime>as.POSIXct("2021-01-01 00:00:00"))
+
+
+##create a subfolder for the depth series plots
+dir.create(file.path("./Individual Plots goldfish "), recursive = TRUE)
+
+###loop to make individual plots per unique fish ID
+#since the tag SN is the same for each of the temp pressure tags try and abacus plots with that. 
+
+tags<-unique(detectionsGFGF$Tag.SN)
+
+unique(detectionsGF1$utc_release_date_time)
+detectionsGF1$SensorType<-as.character(detectionsGF1$SensorType)
+
+detectionsGFGF <- detectionsGFGF %>%
+  mutate(SensorType = case_when(
+    SensorType == "P" ~ 1,
+    SensorType == "T" ~ 2
+  ))
+
+detectionsGFGF$SensorType<-as.factor(detectionsGFGF$SensorType)
+for(i in 1:length(tags)){
+  #i<-1
+  db<- subset(detectionsGFGF, detectionsGFGF$Tag.SN == paste0(tags[i]))
+  #head(db)
+  unique(db$sensor_unit)
+  species<-db$common_name_e[1]
+  id1<-unique(as.character(db$Tag.SN))
+  id<-paste("Tag ID ",id1,sep="")
+  
+  first <- min(db$detection_timestamp_EST) # time of first detection
+  last <- max(db$detection_timestamp_EST) # time of last detection
+  
+  db$station<-as.factor(db$station)
+  db <- db[order(db$detection_timestamp_EST, decreasing=F),]
+  
+  p1<-ggplot(db, aes(x= detection_timestamp_EST,y=station,group=1))+
+       geom_line()+
+    geom_point(col="purple2",size=2)+
+    # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+    #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+    # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+    labs(x="Date",y="Station")+
+    scale_x_datetime(
+      limits = c(first, last),   # Use limits here instead of xlim()
+      #labels = date_format("%m-%Y"),
+      date_breaks = "1 month"
+    )+
+    theme_bw()+
+    theme(axis.text.x=element_text(angle=45, hjust=1))#+facet_wrap(~common_name_e, scales="free_y")
+  p1  
+  
+if( n_distinct(db$SensorType)<2){
+  p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    geom_point(col="black")+
+    
+    labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+  #  scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+theme(text=element_text(size=14))
+  
+  #p2
+}
+  if( n_distinct(db$SensorType)>1){
+    
+  #db$Sensor.Val[db$SensorType=="T"] <-*-1 
+  p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val, col=SensorType)) + 
+    geom_point()+
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    labs(x="Date", y="Depth (m)", fill="Sensor Type")+
+    #scale_y_reverse(sec.axis = sec_axis(~rev(.),name="Temperature (°C)"))+
+    scale_y_continuous(sec.axis = dup_axis(name="Temperature (°C)"))+
+  #  scale_x_datetime(labels = date_format("%m-%Y"))+
+    
+    theme_bw()+theme(text=element_text(size=14))+
+    scale_colour_manual(labels=c("Depth","Temperature"), values=c("black","tomato"))
+  
+  #p2
+  }
+  #margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+  hmmm<-ggarrange(p1,p2,nrow=1)
+  hmmm<-annotate_figure(hmmm,
+                        top = text_grob(paste('Tag ID',id1, '-', species, ''), color = "black", face = "bold", size = 14))
+  
+  ggsave(plot=hmmm, paste0("./Individual_",species,"_ID",id1,"_abacus_depth_plots.png"),  width = 35, height = 20,units = "cm", dpi = 400, bg="white")
+}
+
+setwd("U:/Goldfish_Telem_Jan25/goldfish_Jan2025")
+goldfishfilteredonly<-readRDS("detections_filtered_2015-2025_goldfishonly.rds")
+unique(goldfishfilteredonly$transmitter_id)
+
+
+######################################################################################
+#############################
+##clipping and removind data based on the above
+##DST = days since tagging
+taginfo$DST<-taginfo$lastdetection-taginfo$tagged
+## the number of days with detection data
+taginfo$detection_days <-taginfo$lastdetection-taginfo$firstdetection
+unique(detectionsGF1$transmitter_id)
+
+
+# Replace `id_to_remove` with the vector of IDs you want to remove
+id_to_remove <- c("1374797", "1374803", "1374808", "1546509",
+                  "1546507", "1546506", "1546512", "1546503","1546515"
+                  ,"1374810","1374800", "1374801", "1374802", "1374805",
+                  "1374806", "1374807", "1374815", "1374809","1374811"
+                  ,"1374813")
+unique(detectionsGFGF$Tag.SN)
+
+# Convert both to character to ensure proper comparison
+detectionsGFGF <- detectionsGFGF %>%
+  mutate(Tag.SN = as.character(Tag.SN))
+
+id_to_remove <- as.character(id_to_remove)
+
+# Use filter to remove these individuals
+detectionsGFGF_removals <- detectionsGFGF %>%
+  filter(!Tag.SN %in% id_to_remove)
+unique(detectionsGFGF_removals$Tag.SN)
+
+#unique(detections$transmitter_id)
+unique(detectionsGFGF_removals$Tag.SN) ##compare to see if it removed the proper # of fish. 295 is correct. 
+
+######## clip off the bad data for fish with some good data ######
+###now to subset fish to clip off the bad data where they were considered dead or had a sensor malfunction (often at end of battery life it can give a wonky value)
+#fish that need to have data clipped 
+
+###go thru each fish and see how/when to clip - usually by a time or depth sensor value. 
+##no need to redo fish without new detection data - keep it the same in the code below. Update for fish with new detection data only.
+##based on going thru each individual, clip time is 24 prior it was 1st noticed
+##fill in the code below to keep the appropriate data. 
+##Done Jam 2023 - list of 96 fish here. 
+
+#doing the abacus plot with depth wrapped in plotly for each of these 4 fish that need to be clipped so we can see exactly when they should be clipped
+#unclear as to how data were clipped before?
+
+#subset each fish out 
+library(plotly)
+
+goldfish1546517<-filter(detectionsGFGF, Tag.SN=="1546517")
+  
+  first <- min(goldfish1546517$detection_timestamp_EST) # time of first detection
+  last <- max(goldfish1546517$detection_timestamp_EST) # time of last detection
+  
+  goldfish1546517$station<-as.factor(goldfish1546517$station)
+  goldfish1546517 <- goldfish1546517[order(goldfish1546517$detection_timestamp_EST, decreasing=F),]
+  
+  p1<-ggplot(goldfish1546517, aes(x= detection_timestamp_EST,y=station))+
+       geom_line()+
+    geom_point(col="purple2",size=2)+
+    # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+    #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+    # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+    labs(x="Date",y="Station")+
+    scale_x_datetime(
+      limits = c(first, last),   # Use limits here instead of xlim()
+      #labels = date_format("%m-%Y"),
+      date_breaks = "1 month"
+    )+
+    theme_bw()+
+    theme(axis.text.x=element_text(angle=45, hjust=1))#+facet_wrap(~common_name_e, scales="free_y")
+  p1  
+  
+
+  p2 <- ggplot(data=goldfish1546517, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+    #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+    geom_point(col="black")+
+    
+    labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+   # scale_x_datetime(labels = date_format("%m-%Y"))+
+    theme_bw()+theme(text=element_text(size=14))
+  
+  p2
+  # Convert each ggplot to plotly
+p1_plotly <- ggplotly(p1)
+p2_plotly <- ggplotly(p2)
+
+# Arrange them in a single row
+hmmm_plotly <- subplot(p1_plotly, p2_plotly, nrows = 1, margin = 0.05)
+hmmm_plotly
+
+  #margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+  hmmm<-ggarrange(p1,p2,nrow=1)
+hmmm
+  
+
+id_toclip<- c("1374800", "1374801", "1374802", "1374805",
+                    "1374806", "1374807", "1374815", "1374809","1374811"
+                    ,"1374813")
+
+Id_toclip1 <- detectionsGFGF %>%
+  filter(Tag.SN %in% id_toclip)
+
+unique(Id_toclip1$Tag.SN)
+#1374800 clip to MAY-01-22
+#1374801 clip to APRIL-15-2022
+#1374802 clip to JUNE-01-22
+#1374805 clip to MAY-01-22
+#1374806 clip to MAY-30-22
+#1374807 Clip to AUGUST-15-22
+#1374815 clip to JUNE-15-2022
+#1374809 CLIP TO JUNE-01-2022
+#1374811 Clip to JUNE-01-23
+#1374813 Clip to May 15 2022
+
+#data clipped for 10 fish
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374800 & Id_toclip1$detection_timestamp_EST > "2022-05-01 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374801 & Id_toclip1$detection_timestamp_EST > "2022-04-15 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374802 & Id_toclip1$detection_timestamp_EST > "2022-06-01 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374805 & Id_toclip1$detection_timestamp_EST > "2022-05-01 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374806 & Id_toclip1$detection_timestamp_EST > "2022-05-30 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374807 & Id_toclip1$detection_timestamp_EST > "2022-07-15 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374815 & Id_toclip1$detection_timestamp_EST > "2022-06-15 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374809 & Id_toclip1$detection_timestamp_EST > "2022-06-01 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374811 & Id_toclip1$detection_timestamp_EST > "2023-06-01 00:00:00"),] 
+Id_toclip1<-Id_toclip1[!(Id_toclip1$Tag.SN==1374813 & Id_toclip1$detection_timestamp_EST > "2022-05-15 00:00:00"),] 
+
+
+#add the clipped data back to the other dataset (that has dead fish also removed from it)
+detectionsGFGF$detection_timestamp_EST <- as.POSIXct(detectionsGFGF$detection_timestamp_EST, format="%Y-%m-%d %H:%M:%S")
+
+unique(Id_toclip1$Tag.SN)
+unique(detectionsGFGF_removals$Tag.SN)
+
+clipped_plusremovals<-rbind(Id_toclip1,detectionsGFGF_removals)
+
+unique(clipped_plusremovals$Tag.SN)
+clipped_plusremovals_test1<-filter(clipped_plusremovals, Tag.SN=="1374800")
+#remove the first two weeks of data from each fish 
+
+library(dplyr)
+
+# Example: Assuming your dataframe is named `detections`
+clipped_removals_firsttwoweeeks <- clipped_plusremovals %>%
+  group_by(Tag.SN) %>%
+  mutate(tag_date = min(as.Date(EST_release_date_time), na.rm = TRUE)) %>%  # Get tagging date per animal
+  filter(as.Date(detection_timestamp_EST) > tag_date + 14) %>%  # Keep only detections after 14 days
+  ungroup()
+unique(clipped_removals_firsttwoweeeks$Tag.SN)
+
+saveRDS(clipped_removals_firsttwoweeeks, "./HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025_correct.rds")
+#this has 3812078 detections 
+detections_gf_filteredclipped<-readRDS("U:/Goldfish_Telem_Jan25/goldfish_Jan2025/HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025.rds")
+beep(5)
+
+unique(detections_gf_filteredclipped$Tag.SN)
+
+
+#go back in now and redo all the abacus plots in the loop so we can have another look at all the data and make sure 
+#everything was clipped correctly
+
+##create a subfolder for the depth series plots
+dir.create(file.path("./Individual Plots goldfish_postclipfiltering "), recursive = TRUE)
+
+###loop to make individual plots per unique fish ID
+#since the tag SN is the same for each of the temp pressure tags try and abacus plots with that. 
+
+tags<-unique(clipped_removals_firsttwoweeeks$Tag.SN)
+
+unique(clipped_removals_firsttwoweeeks$utc_release_date_time)
+clipped_removals_firsttwoweeeks$SensorType<-as.character(clipped_removals_firsttwoweeeks$SensorType)
+
+clipped_removals_firsttwoweeeks <- clipped_removals_firsttwoweeeks %>%
+  mutate(SensorType = case_when(
+    SensorType == "P" ~ 1,
+    SensorType == "T" ~ 2
+  ))
+
+clipped_removals_firsttwoweeeks$SensorType<-as.factor(clipped_removals_firsttwoweeeks$SensorType)
+for(i in 1:length(tags)){
+  #i<-1
+  db<- subset(clipped_removals_firsttwoweeeks, clipped_removals_firsttwoweeeks$Tag.SN == paste0(tags[i]))
+  #head(db)
+  unique(db$sensor_unit)
+  species<-db$common_name_e[1]
+  id1<-unique(as.character(db$Tag.SN))
+  id<-paste("Tag ID ",id1,sep="")
+  
+  first <- min(db$detection_timestamp_EST) # time of first detection
+  last <- max(db$detection_timestamp_EST) # time of last detection
+  
+  db$station<-as.factor(db$station)
+  db <- db[order(db$detection_timestamp_EST, decreasing=F),]
+  
+  p1<-ggplot(db, aes(x= detection_timestamp_EST,y=station,group=1))+
+    geom_line()+
+    geom_point(col="purple2",size=2)+
+    # geom_line( aes(x= detection_timestamp_EST), col="firebrick1", size =1)+
+    #geom_point(aes(x=end),shape= 4,col="black", size = 3)+
+    # geom_segment(aes(x = min,yend=transmitter_id,xend = max),size=1)+
+    labs(x="Date",y="Station")+
+    scale_x_datetime(
+      limits = c(first, last),   # Use limits here instead of xlim()
+      #labels = date_format("%m-%Y"),
+      date_breaks = "1 month"
+    )+
+    theme_bw()+
+    theme(axis.text.x=element_text(angle=45, hjust=1))#+facet_wrap(~common_name_e, scales="free_y")
+  p1  
+  
+  if( n_distinct(db$SensorType)<2){
+    p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val)) + 
+      #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+      geom_point(col="black")+
+      
+      labs(x="Date", y="Depth (m)")+#scale_y_reverse()+
+      #  scale_x_datetime(labels = date_format("%m-%Y"))+
+      theme_bw()+theme(text=element_text(size=14))
+    
+    #p2
+  }
+  if( n_distinct(db$SensorType)>1){
+    
+    #db$Sensor.Val[db$SensorType=="T"] <-*-1 
+    p2 <- ggplot(data=db, aes(x= detection_timestamp_EST,y=Sensor.Val, col=SensorType)) + 
+      geom_point()+
+      #geom_line(aes(group=1))+#, alpha=0.8, col="black") + 
+      labs(x="Date", y="Depth (m)", fill="Sensor Type")+
+      #scale_y_reverse(sec.axis = sec_axis(~rev(.),name="Temperature (°C)"))+
+      scale_y_continuous(sec.axis = dup_axis(name="Temperature (°C)"))+
+      #  scale_x_datetime(labels = date_format("%m-%Y"))+
+      
+      theme_bw()+theme(text=element_text(size=14))+
+      scale_colour_manual(labels=c("Depth","Temperature"), values=c("black","tomato"))
+    
+    #p2
+  }
+  #margin = theme(plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+  hmmm<-ggarrange(p1,p2,nrow=1)
+  hmmm<-annotate_figure(hmmm,
+                        top = text_grob(paste('Tag ID',id1, '-', species, ''), color = "black", face = "bold", size = 14))
+  
+  ggsave(plot=hmmm, paste0("./Individual_",species,"_ID",id1,"_abacus_depth_plots_postedit.png"),  width = 35, height = 20,units = "cm", dpi = 400, bg="white")
+}
+
+
+
+
+#pull out old table of fish then a new table of fish then highlight the old table of fish that were removed or clipped details
+
+# Ensure timestamps are in the correct format
+detectionsGFGF <- detectionsGFGF %>%
+  mutate(detection_timestamp_EST = as.POSIXct(detection_timestamp_EST, format="%Y-%m-%d %H:%M:%S"))
+
+length(unique(clipped_removals_firsttwoweeeks$Tag.SN))  # Should return 20
+
+# Convert Tag.SN to character to ensure correct grouping
+clipped_removals_firsttwoweeeks <- clipped_removals_firsttwoweeeks %>%
+  mutate(Tag.SN = as.character(Tag.SN),
+         detection_timestamp_EST = as.POSIXct(detection_timestamp_EST, format="%Y-%m-%d %H:%M:%S"))
+
+# Check the number of unique tags before summarizing
+print(length(unique(clipped_removals_firsttwoweeeks$Tag.SN)))  # Should return 20
+
+# Generate summary table with ONE ROW per unique Tag.SN
+colnames(clipped_removals_firsttwoweeeks)
+
+summary_table_goldfishtagged <- clipped_removals_firsttwoweeeks %>%
+  group_by(Tag.SN) %>%
+  summarise(
+    date_tagged = min(detection_timestamp_EST, na.rm = TRUE),  # First detection = tagging date
+    first_detection = min(detection_timestamp_EST, na.rm = TRUE),
+    last_detection = max(detection_timestamp_EST, na.rm = TRUE),
+    
+    # Calculate days at large
+    days_at_large = round(as.numeric(difftime(last_detection, date_tagged, units = "days"))),
+    
+    # Taking the first recorded value for these measurement
+    length = first(length, na.rm = TRUE),
+    weight = first(weight, na.rm = TRUE),
+    
+    # Depth statistics
+    max_depth = max(Sensor.Val, na.rm = TRUE),
+    min_depth = min(Sensor.Val, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  arrange(date_tagged)  # Order by tagging date
+
+#do we force min depth to 0??
+
+
+# View the summary table
+print(summary_table)
+
+# Save as CSV if needed
+install.packages("officer")
+install.packages("flextable")  # Optional, for better table formatting
+library(officer)
+library(flextable)  # Optional, for better formatting
+# Create a new PowerPoint file
+pptx <- read_pptx()
+summary_table_goldfishtagged <- flextable(summary_table_goldfishtagged)
+# Add a slide and insert the table
+pptx <- pptx %>%
+  add_slide(layout = "Title and Content", master = "Office Theme") %>%
+  ph_with(value = summary_table_goldfishtagged, location = ph_location_type(type = "body"))
+
+# Save the PowerPoint file
+print(pptx, target = "my_presentation.pptx")
+
+write.csv(summary_table_goldfishtagged, "tag_summary_goldfish_included2024.csv", row.names = FALSE)
+
+
+#one thing to consider, lots of receivers= getting picked up on multiple ones within the same day
+#so how do other systems deal with this, it is that they are detected under the exact same time stamp or is that in the animations
+#they are detected at all those locations wtih in the same day so making the window smaller would fix this issues 
+#this might? cause issues when looking at proportionality of receivers per day
+#might need to do like a weighted average so if detected on 5 different receivers within one day. then need to let R
+#select the receiver that most detection occurred on for that specific day...
+#and for animations can carry that forward where each day only has one detection location. so that we can see movement patterns more clearly 
+#instead of seeing it across 10 in the west end. 
+
+
+#adding depth infoamtion to these plots and animations
+#if I can get the back of the polygon to show season via colour, could associated the geom_point with depth and hve is assign a color
+#depending on the depth information
+##
+#3d plotting, depth can be plotted on the z axis??
+#I dont know if thats it worth probably best to just do the color associated with depth. could even bin the depths
+#0-3m shallow, 3.1-6m medium, 6.1-8m mid deep, >8.1 deep.. that way color changes are easy to follow ????
+
+
+###############################
+##want to add in color for either the geom point or the polygon fill to match up with seasons, so it changes when seasons change
+#also would be cool to wrap the abacus plots and depth etc. into a plotly that way you can hover and see exact depth location
+
+##################
+##animation code
+
+unique(pos$animal_id)
+
+goldfish1374799<-filter(detectionsGFGF, Tag.SN=="1374799")
+
+unique(goldfish1390$animal_id)
+
+###using gganimate                             
+library(gifski)
+library(gapminder)
+
+p<-ggplot(data = HHmap) +
+  geom_sf(color = "black", fill = "lightgrey") +
+ # geom_point(data = receivers, aes(x = deploy_long, y = deploy_lat),
+            size = 2, color = "black", inherit.aes = FALSE) + #receivers in water are black points
+  geom_point(data=goldfish1390, aes(x=longitude, y=latitude,
+                            color=record_type,
+                           size=5), inherit.aes=FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+   scale_color_manual(values=c("red", "blue")) +
+  coord_sf(xlim = c(-79.95, -79.75), ylim = c(43.22, 43.35), expand = FALSE)+
+  #scale_color_manual(values=c("red", "blue"))+
+ # scale_size_manual(values=c(2,1)) +
+  theme(legend.position = "none") +
+  transition_time(bin_timestamp)    +
+  ggtitle('{frame_time}')
+
+animate(p, fps = 4,nframes = 200, renderer = gifski_renderer())
+anim_save("rudd9155_bigmover_rec.gif")
+
+
+
+unique(depth2025_gf$transmitter_id)
+unique(temp2025_gf$transmitter_id)
+#these hve the same transmitter ids now... 
+#when looking in further, times of detection associated with a temp and a depth are off by a few mintues
+#so cant nessesarilymake them bind together but need to inflate the dataset
+
+
+####look into when it was working for the abacus plots and then it stopped working after we clipped and filtered the dataframe
+
+

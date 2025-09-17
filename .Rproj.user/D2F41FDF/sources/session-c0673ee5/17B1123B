@@ -1,0 +1,26 @@
+{
+    "id": "17B1123B",
+    "path": "U:/Goldfish_Telem_Jan25/summarizedetections_uniqueindividualsperday_GC.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": true,
+    "created": 1750686493798.0,
+    "source_on_save": false,
+    "relative_order": 8,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "61,16",
+        "scrollLine": "44"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1741975205,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1750686514324,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,228 @@
+#####################################
+## all telem data to assess other spawning habitat locations of goldfish in HH
+### take all the data, focus on the spring spawning window thats already been identified 
+##animation or bubble plots?
+##animation we can do all fish as a color for the year, so 5 colors
+##bubble plot can do number of fish at each recevier by weekly? and stitch them together, same idea
+#year as the color, and by year as the color, I mean year tagged? 
+
+##########################################
+
+install.packages('glatos', repos = c('https://ocean-tracking-network.r-universe.dev', 'https://cloud.r-project.org'))
+library(glatos)
+setwd("C:/Users/TURNERN/Desktop/HH goldfish/telemetryR/")
+Goldfish_2024<-readRDS("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish/HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025_correct.rds")
+
+##dataframe HH_GF_withmonthsseasonsadded appears to be all the GF detection data
+
+setwd("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish")
+goldfish204<-readRDS("HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025_correct.rds")
+
+
+#before plotting lets just summarize daily detection for each individual
+goldfish2049 <- goldfish204 %>%
+  mutate(detection_timestamp_utc = as.Date(detection_timestamp_utc))
+
+#remove animal ID and sub in that for the tag.sn
+goldfish2049 <- goldfish2049[, -1]
+colnames(goldfish2049)[colnames(goldfish2049) == "tag_serial_number"] <- "animal_id"
+head(goldfish2049$deploy_lat)
+
+##test
+daily_location <- goldfish2049 %>%
+  group_by(Tag.SN, detection_timestamp_utc, station_no, deploy_lat, deploy_long) %>%
+  count(sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(Tag.SN, detection_timestamp_utc, station_no, deploy_lat, deploy_long)
+
+colnames(goldfish2049)
+
+colnames(goldfish2049)[colnames(goldfish2049) == "Tag.SN"] <- "animal_id"
+
+head(goldfish2049$animal_id)
+
+
+pos <- interpolate_path(goldfish2049, int_time_stamp=86400)
+
+#need to add in an animal_id just change to tag.sn 
+  
+head(pos)
+#make each individual a diff colour
+n<-unique(pos$animal_id)
+col.rainbow<-rainbow(length(n))
+
+pos3<-data.frame()
+
+for (i in 1:length(n)){
+  
+  pos2<-pos[pos$animal_id==n[i],]
+  pos2$Colour<-col.rainbow[i]
+  
+  
+  pos3<-rbind(pos3,pos2)
+  
+}
+
+pos<-pos3
+unique(pos$animal_id)
+
+##shows a full coloured point if a true detection and not interpolation
+pos$fill<-ifelse(pos$record_type =="detection", 27,1)
+
+# convert pos2 to data.table
+setDT(pos)
+
+# extract unique bin_timestamp from the interpolated data
+int <- unique(pos, by = "bin_timestamp")
+
+setDF(pos)
+
+pos$bin_timestamp <- as.POSIXct(pos$bin_timestamp, format = "%Y-%m-%d %H:%M:%S")
+
+head(pos)
+library(dplyr)
+
+# Convert bin_timestamp to Date to group by day
+pos <- pos %>%
+  mutate(date = as.Date(bin_timestamp)) 
+
+head(pos)
+################################
+##had this code working but now its not
+#looking to just get one single detection per fish per day. and then make an animation
+#that removes all the multple detections on receiver each day chaos 
+
+pos_subset <- pos %>%
+  mutate(date = as.Date(bin_timestamp)) %>%  # Extract date from timestamp
+  group_by(animal_id, date, latitude, longitude) %>% 
+  summarise(count = n(), .groups = "drop") %>%  # Count occurrences of each location per day
+  group_by(animal_id, date) %>%  # Group by animal_id and date for selecting the most frequent location
+  slice_max(count, n = 1, with_ties = FALSE) %>%  # Select the most frequent location per day
+  ungroup() %>%  # Ungroup after summarise to avoid issues with select
+  left_join(pos, by = c("animal_id", "date", "latitude", "longitude")) %>%  # Join back to original data to get additional columns
+  dplyr::select(-count, -date)  # Remove count and date columns
+#############################################
+
+# View results
+head(pos_subset)
+pos_subset$animal_id <- factor(pos_subset$animal_id)  # Ensure all individuals are factors
+
+#assign pos_subset a gen_season column to plot a color change assocaited with season on the animation 
+### Day of Year ##
+
+pos_subset$doy<- strftime(pos_subset$bin_timestamp, format = "%j")
+pos_subset$doy<-as.numeric(pos_subset$doy)
+
+pos_subset$gen_season<-NA
+
+pos_subset$gen_season<-
+  ifelse((pos_subset$doy > 110) & (pos_subset$doy<=161 ), "Spring",  #april 20th
+         ifelse((pos_subset$doy > 161) & (pos_subset$doy<=274 ), "Summer",  #june 10th
+                ifelse((pos_subset$doy > 274) & (pos_subset$doy<=324 ), "Fall", #oct 1st
+                       ifelse((pos_subset$doy > 324), "Winter",  #nov 20th
+                              ifelse((pos_subset$doy<=110 ), "Winter",NA)))))
+
+
+##original code
+ALL_goldfishincluded_daily2024 <- HHmap +
+  geom_point(data = pos_subset, aes(x = longitude, y = latitude, color = animal_id, size = record_type), inherit.aes = FALSE) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+ # scale_color_manual(values = c("red", "blue")) +
+  scale_color_manual(values=rainbow(length(levels(pos_subset$animal_id))))+
+  scale_size_manual(values = c(4, 2)) +
+   # theme(legend.position = "right") +  
+    #theme(legend.text = element_text(size=3))+# Ensure the legend is visible
+  transition_time(bin_timestamp) +
+  ggtitle('{frame_time}')
+
+
+##########adding in a rug bar to define season 
+season_colors <- c("Winter" = "lightblue2", "Spring" = "pink", "Summer" = "red4", "Fall" = "orange3")
+
+# Create a color palette for fish
+fish_colors <- setNames(rainbow(length(levels(pos_subset$animal_id))), levels(pos_subset$animal_id))
+
+# Merge fish and season colors into one vector
+all_colors <- c(fish_colors, season_colors)
+
+ALL_goldfishincluded_daily2024 <- HHmap +
+  geom_point(data = pos_subset, aes(x = longitude, y = latitude, color = animal_id, size = record_type), inherit.aes = FALSE) +
+ # geom_rug(data = pos_subset, aes(x = longitude, color = gen_season), sides = "b", inherit.aes = FALSE) +  # Adds seasonal rug
+  xlab("Longitude") +
+  ylab("Latitude") +
+  scale_color_manual(values = all_colors) +  # Assign unique colors for both fish & seasons
+  scale_size_manual(values = c(4, 2)) +
+  theme(legend.position = "right") + 
+  transition_time(bin_timestamp) +
+  ggtitle('{frame_time}')
+
+ALL_goldfishincluded_daily2024
+
+
+
+anim_save("allGF_2024_dailyavgdetection_titletest.mp4", 
+          animation = ALL_goldfishincluded_daily2024, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+  #neeed to fix the size of the bubbles, is one color-one fish ?
+#bcaseu so many detectios aross alot of recs in one day they just show up in the entire west end.
+#how are we going to deal with this.. do we need to summraize to get one daily detection or two detections per day per indivial 
+#on specific reciver stations. ???
+#should it be by the num of detections per day per individual per receiver ??? how do we sumrraize this (this could also get
+# pulled forward into the proportional distribution aswell)
+
+#chck proportional distribution code did we already start to deal with tihs there??
+
+##############general seasonal bubble plots 
+# Example color mapping
+season_colors <- c("Winter" = "lightblue2", "Spring" = "pink", "Summer" = "red4", "Fall" = "orange3")
+goldfish204$season_colors <- season_colors[goldfish204$gen_season]
+
+sf::st_crs(HHmap)
+
+goldfish_spring <- detection_bubble_plot(
+  goldfish2049, 
+  map = shorelinemap,
+  location_col = "station",
+  col = goldfish204$season_colors,
+  background_xlim = x_limits_HHall,  # Set x-axis zoom limits
+  background_ylim = y_limits_HHall   # Set y-axis zoom limits
+)
+print(goldfish_spring)
+ggsave("goldfish_bubble_plot.png", plot = goldfish_spring)
+
+
+detection_bubble_plot(goldfish2049, location_col = "station", map = shorelinemap, summ_type='locations',
+                      background_ylim = c(43.25, 43.30), background_xlim = c(-79.94, -79.85))
+
+goldfish2049$animal_id
+goldfish2049$detection_timestamp_utc <- as.POSIXct(goldfish2049$detection_timestamp_utc, format = "%Y-%m-%d %H:%M:%S")
+
+ locations_summary<-summarize_detections(det=goldfish2049,summ_type="both", location_col = "station")
+       
+locations_summary$doy<- strftime(locations_summary$bin_timestamp, format = "%j")
+locations_summary$doy<-as.numeric(locations_summary$doy)
+
+locations_summary$gen_season<-NA
+
+locations_summary$gen_season<-
+  ifelse((locations_summary$doy > 110) & (locations_summary$doy<=161 ), "Spring",  #april 20th
+         ifelse((locations_summary$doy > 161) & (locations_summary$doy<=274 ), "Summer",  #june 10th
+                ifelse((locations_summary$doy > 274) & (locations_summary$doy<=324 ), "Fall", #oct 1st
+                       ifelse((locations_summary$doy > 324), "Winter",  #nov 20th
+                              ifelse((locations_summary$doy<=110 ), "Winter",NA)))))
+
+ 
+ 
+       
+ LWWW+geom_point(data=locations_summarywinter, aes(x=mean_lon, y=mean_lat, size=num_fish), color= 'gold2')
+             LWWW+geom_point(data=locations_summarywinter, aes(x=mean_lon, y=mean_lat, size=num_dets), color= 'gold')
+             

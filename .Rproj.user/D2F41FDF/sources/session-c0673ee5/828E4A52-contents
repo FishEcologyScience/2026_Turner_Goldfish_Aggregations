@@ -1,0 +1,833 @@
+
+##summarize the migrants 95 for 2018
+# This will convert your data into a spatial points object, that will be used to 
+# convert from your current projection to Lat/Long in WGS84
+xx = SpatialPoints(ALLHRCR_migres_NEW2025df[,c("long","lat")], proj4string = CRS("+proj=utm +zone=14 +datum=NAD83 +units=m
+                                                          +no_defs +ellps=GRS80 +towgs84=0,0,0"))
+# epsg:4326 is shorthand for the WGS84 conversion (can't remember where I found this. Somewhere online)
+xx = spTransform(xx, CRS("+init=epsg:4326"))
+xx = as.data.frame(xx)
+names(xx) = c("Lon", "Lat") 
+
+summary(xx)
+# paste your converted WGS84 data to your original data
+data = cbind(ALLHRCR_migres_NEW2025df, xx)
+summary(data)
+
+
+
+
+
+
+ALLHRCR_migres_NEW2025df
+
+summarizedlocationdata <- data %>%
+  group_by(group, Year, Month, Range) %>%
+  summarize(
+    mean_lat = mean(Lat, na.rm = TRUE),
+    mean_lon = mean(Lon, na.rm = TRUE)
+  )
+
+# View the result
+head(mean_df)
+
+
+##plot the data to see how it looks
+
+#convert
+LW_cords<-ggplot(sf_poly) +
+  geom_sf(aes(fill = factor(id))) +
+  scale_fill_manual(values = c("1" = "lightblue", "2" = "darkgrey")) +
+  ggtitle("") +
+  theme(legend.position = "none")
+
+LW_cords <- ggplot(sf_poly) +
+  geom_sf(aes(fill = factor(id))) +
+  scale_fill_manual(values = c("1" = "lightblue", "2" = "white")) +
+  ggtitle("") +
+  theme_bw() + theme(panel.grid = element_blank()+coord_equal())+
+  theme(legend.position = "none") +
+  guides(fill = "none") + # Explicitly remove the fill legend
+  coord_sf(ylim = c(52.5, min(sf::st_bbox(sf_poly)["ymin"])))  # Set the y-axis limit
+
+
+LWW<-ggplot() + 
+  geom_polygon(data = LW, aes(Lon, Lat, group = part), fill ="lightblue") + 
+  geom_polygon(data = islands, aes(Lon, Lat, group = part), fill = "darkgrey") +
+  theme_bw() + theme(panel.grid = element_blank()+coord_equal())
+
+plot(LWW)
+
+#subset the dataframe to be 95 residents and 95 migrants 
+
+
+LWW1 <- LW_cords + 
+  geom_point(data = all95, aes(x = mean_lon, y = mean_lat, shape = group)) +  # Add points
+  facet_wrap(~Year)  # Facet by Year
+
+
+###################################################################
+# Filter for the year 2017 and facet by months
+all95<-filter(summarizedlocationdata, Range=="HR95" )
+
+LWW12017 <- LW_cords + 
+  geom_point(data = all95 %>% filter(Year == 2017), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2017") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+
+# Remove legends for 'shape' and 'size'
+
+# View the plot
+LWW12017
+
+# View the plot
+LWW12017
+
+
+LWW12018 <- LW_cords + 
+  geom_point(data = all95 %>% filter(Year == 2018), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2018") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+
+
+# View the plot
+LWW12018
+
+
+LWW12019 <- LW_cords + 
+  geom_point(data = all95 %>% filter(Year == 2019), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2019") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+
+LWW12019
+
+# View the plot
+LWW1
+LWW1_plotly <- ggplotly(LWW1)
+
+###################now do the same for the core range data
+all50<-filter(summarizedlocationdata, Range=="HR50" )
+
+# Filter for the year 2017 and facet by months
+LWW12017_all50core <- LW_cords + 
+  geom_point(data = all50 %>% filter(Year == 2017), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2017") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+# View the plot
+LWW12017_all50core
+
+
+
+LWW12018_all50core <- LW_cords + 
+  geom_point(data = all50 %>% filter(Year == 2018), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2018") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+# View the plot
+
+# View the plot
+LWW12018_all50core
+
+LWW12019_all50core <- LW_cords + 
+  geom_point(data = all50 %>% filter(Year == 2019), 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("2019") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+# View the plot
+# View the plot
+LWW12019_all50core
+
+
+##########home range all years combined
+
+summarizedlocationdata_yearscmbd <- data %>%
+  group_by(group, Month, Range) %>%
+  summarize(
+    mean_lat = mean(Lat, na.rm = TRUE),
+    mean_lon = mean(Lon, na.rm = TRUE)
+  )
+
+##50 plot
+all50_allyear<-filter(summarizedlocationdata_yearscmbd, Range=="HR50" )
+
+# Filter for the year 2017 and facet by months
+LWW12017_all50core_allyear <- LW_cords + 
+  geom_point(data = all50_allyear, 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("Core Range") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+
+LWW12017_all50core_allyear
+
+##home range
+all95_allyear<-filter(summarizedlocationdata_yearscmbd, Range=="HR95" )
+
+# Filter for the year 2017 and facet by months
+LWW12017_all95home_allyear <- LW_cords + 
+  geom_point(data = all95_allyear, 
+             aes(x = mean_lon, y = mean_lat, shape = group, color = group), size = 5) +  # Set size outside aes()
+  scale_color_manual(values = c("migrant" = "#FF5733", "resident" = "forestgreen")) + 
+  ggtitle("Home Range") +
+  theme(legend.position = "right") + 
+  facet_wrap(~Month) +  # Facet by month
+  labs(x = "Longitude", y = "Latitude") +
+  theme(strip.text = element_text(size = 16),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=14),
+        axis.text.y = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        legend.text = element_text(size = 13))
+
+LWW12017_all95home_allyear
+
+
+#boxplots to see range values
+##the km2 values look correct - larger for 95 and smaller for 50...
+head(ALLHRCR_migres_NEW2025df)
+
+summarizedrangekm2ata <- ALLHRCR_migres_NEW2025df %>%
+  group_by(group, Year, Month, Range) %>%
+  summarise(
+    mean_range = mean(HR, na.rm = TRUE),
+    min_range = min(HR, na.rm = TRUE),
+    max_range = max(HR, na.rm = TRUE)
+  )
+
+numindividuals<-ALLHRCR_migres_NEW2025df %>%
+  group_by(Month, Range, group, Year) %>%
+  summarise(count=n_distinct(ID))
+head(numindividuals)
+
+
+library(forcats)
+
+# Reorder the Month column to ensure it's in chronological order
+my_table <- my_table %>%
+  mutate(Month = factor(Month, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))) %>%
+  arrange(Range, group, Year, Month)  # Sorting by Range, group, Year, and Month
+
+# View the reordered table
+print(my_table)
+#export to word
+library(officer)
+
+# Create a Word document
+doc <- read_docx()
+
+# Add the table to the Word document
+doc <- doc %>%
+  body_add_table(my_table, style = "table_template")
+
+# Save the Word document
+print(doc, target = "my_table.docx")
+
+#######################################
+
+#use this to update supp table S1 #s
+numindividuals_yearscmbd<-ALLHRCR_migres_NEW2025df %>%
+  group_by(Month, Range, group) %>%
+  summarise(count=n_distinct(ID))
+
+###########################################
+##GLMM models
+
+##model used from old version
+HRkm1.1<-lmer(HRlog1~Month*group +year (1|ID), HRmigres_months_latlong_seasons, REML=TRUE)
+
+#REML VS. ML
+
+
+
+
+#udpated model to include year 
+
+#HR~date*group+year
+
+##testing if we need to log the data now or not
+# Load necessary libraries
+library(ggplot2)
+library(moments)
+library(ggpubr)
+library(dplyr)
+library(tidyr)
+
+
+ALLHRCR_migres_NEW2025df<-updated_HRCR_meancentroid_2025CJZ_finaldataframe
+
+# Check for skewness and normality
+ggplot(ALLHRCR_migres_NEW2025df %>% filter(Range == "HR95"),
+       aes(x = HR)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") + 
+  ggtitle("Histogram of HR (Home Range)") +
+  theme_minimal()
+
+ggplot(ALLHRCR_migres_NEW2025df %>% filter(Range == "HR50"),
+       aes(x = HR)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") + 
+  ggtitle("Histogram of HR (Home Range)") +
+  theme_minimal()
+# Normality Test: Shapiro-Wilk Test
+#both are very right skewed 
+
+all95<-filter(ALLHRCR_migres_NEW2025df, Range=="HR95" )
+
+shapiro.test(all95$HR)
+
+# Skewness Test
+skewness(all95$HR)
+
+##transform the data for the model and interpret those reults
+#then backtransform the data nd plot for readers to get an understanding and address a revision comment
+
+
+
+#start with the home range 
+all95$HR_log <- log(all95$HR)
+
+ggplot(all95,
+       aes(x = HR_log)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") + 
+  ggtitle("Histogram of HR (Home Range)") +
+  theme_minimal()
+#good now 
+
+skewness(all95$HR_log)
+head(all95)
+##run the GLMM model with year added in now 
+library("lme4")
+
+#homerange_95model<-lmer(HR_log~Month*group +(1|ID), all95, REML=TRUE)
+#summary(homerange_95model)
+#homerange_95model <- lmer(HR_log ~ Month * group + Year, all95, REML = TRUE)
+#library(car)
+#vif(homerange_95model)
+#homerange_95model_no_interaction <- lmer(HR_log ~ Month + group + Year + (1|ID), all95, REML = TRUE)
+
+#the GLMM says that including ID as a random does not impact the varaince 
+
+#trying a linear model
+#HRmodel_no_random <- lm(HR_log ~ Month * group + Year, data = all95)
+
+#summary(HRmodel_no_random)
+
+#comparing models 
+# Fit both models with REML = FALSE (i.e. ML estimation)
+#model_random <- lmer(HR_log ~ Month * group + Year + (1 | ID), data = all95, REML = FALSE)
+#model_no_random <- lm(HR_log ~ Month * group + Year, data = all95, REML=FALSE)
+
+# Compare AIC values
+#AIC(model_random, model_no_random)
+##AICc difference of 2 so keeping the GLMM random fixed effects model
+
+#now testing different between year or just mergeing dta together and dropping year all together. 
+#like in the first CJZ version submitted
+model_random <- lmer(HR_log ~ Month * group + Year + (1 | ID), data = all95, REML = FALSE)
+model_random_noyear <- lmer(HR_log ~ Month * group + (1 | ID), data = all95, REML = FALSE)
+AIC(model_random, model_random_noyear)
+
+summary(model_random)
+summary(model_random_noyear)
+
+#adding year explains variation in the data so should keep it in as an additive effect 
+model_random <- lmer(HR_log ~ Month * group + Year + (1 | ID), data = all95, REML = FALSE)
+#flase is correct here becaseu we are interested in the fixed effects vs the random ones (would set to true if the case)
+summary(model_random)
+
+################################################################################
+#################################################################################
+############## working code for glmm model with back transformed values box plots with post hoc letters 
+# Load necessary libraries
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(multcomp)
+
+# Get the back-transformed predicted values
+predicted_values <- predict(model_random, type = "response") # This is the log-transformed predictions
+
+# Get estimated marginal means for the interaction between Month and group
+test1 <- lsmeans(model_random, ~ Month * group+Year, type = "response")
+###for tabel in supp
+
+# Get compact letter display for the pairwise comparisons
+letters_test1_HR <- cld(test1, alpha = 0.05, Letters = letters)
+head(letters_test1_HR)
+
+# Assuming you are working with a data frame named letters_test1_CR
+letters_test1_HR$emmean_backtransformed1 <- exp(letters_test1_HR$emmean)
+letters_test1_HR$lower.CL_backtransformed1 <- exp(letters_test1_HR$lower.CL)
+letters_test1_HR$upper.CL_backtransformed1 <- exp(letters_test1_HR$upper.CL)
+
+# Check the table
+head(letters_test1_HR)
+
+# Round the numeric columns to 2 significant digits
+
+# Check the table
+head(letters_test1_HR)
+
+
+
+# Add the table to the Word document
+doc<-read_docx()
+head(letters_test1_HR)
+letters_test1_HR <- letters_test1_HR %>%
+  mutate(Month = factor(Month, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))) %>%
+  arrange(Month, group, emmean, SE, df, lower.CL, upper.CL, emmean_backtransformed1, lower.CL_backtransformed1, upper.CL_backtransformed1, .group)  # Sorting by Range, group, Year, and Month
+
+
+
+doc <- doc %>%
+  body_add_table(letters_test1_HR, style = "table_template")
+
+
+
+# Save the Word document
+print(doc, target = "letters_test1_HR.docx")
+
+
+
+
+
+
+
+
+################
+# Get compact letter display for the pairwise comparisons
+#letters_test1 <- cld(test1, alpha = 0.05, Letters = letters)
+# View the compact letter display
+#print(letters_test1)
+
+
+# Add the back-transformed predicted values to your data
+all95$predicted_HR <- exp(predict(model_random))
+
+predictions<-predict(model_random, se.fit=TRUE)
+alpha <- 0.05  # 95% confidence level
+z_value <- qnorm(1 - alpha / 2)  # Approx 1.96
+
+all95$predicted_HR <- exp(predictions$fit)  # Back-transformed predictions
+all95$Pred_lower_CI <- exp(predictions$fit - z_value * predictions$se.fit)  # Lower bound
+all95$Pred_upper_CI <- exp(predictions$fit + z_value * predictions$se.fit)  # Upper bound
+########this is the data you will plot with but need to summarize it first 
+summary_preds <- all95 %>%
+  group_by(Month, group) %>%
+  summarise(mean_pred = mean(predicted_HR),
+            lower_CI = mean(Pred_lower_CI),
+            upper_CI = mean(Pred_upper_CI),
+            .groups = "drop")
+
+all95$Month <- factor(all95$Month, levels = c("January", "February", "March", "April", "May", "June", 
+                                              "July", "August", "September", "October", "November", "December"))
+
+all95$Month <- factor(all95$Month, levels = unique(all95$Month))
+summary_preds$Month <- factor(summary_preds$Month, levels = levels(all95$Month))
+
+all95$group <- factor(all95$group, levels = unique(all95$group))
+summary_preds$group <- factor(summary_preds$group, levels = levels(all95$group))
+ggplot()
+
+p <- ggplot(all95, aes(x = Month, y = predicted_HR, fill = group)) +
+  geom_boxplot() +  # Standard boxplot
+  scale_fill_manual(values = c("migrant" = "#ff7f0e", "resident" = "#1f77b4")) +  
+ # geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.5) +  # Add jittered points for predictions
+  geom_errorbar(data = summary_preds, aes(y = mean_pred, ymin = lower_CI, ymax = upper_CI), 
+                width = 0.5, 
+                linewidth= 0.7,
+              position = position_dodge(width = 0.75), 
+                color = "black") +  # Add summarized error bars
+  labs(x = "", 
+    y = expression("Back-transformed km"^2~"Home Range (95%)"), 
+       fill = "Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x=element_text(size=12), 
+        axis.text.y=element_text(size=12), 
+        axis.title.y=element_text(size=12), 
+        legend.title = element_text(size=12), 
+        legend.text=element_text(size=12), 
+           legend.position = c(0.9, 0.9))
+
+
+print(p)
+
+###########
+ggplot(letters_test1_HR, aes(x = group, y = emmean_backtransformed1 )) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL_backtransformed1, ymax = upper.CL_backtransformed1), width = 0.2) +
+ # geom_text(aes(label = letters, y = upper.CL_backtransformed1), vjust = -0.5) +
+  labs(y = "Backtransformed Mean", x = "Group")
+
+#add CLD letters 
+test1 <- lsmeans(model_random, ~ Month * group+Year, type = "response")
+
+# Get compact letter display for the pairwise comparisons
+letters_test1 <- cld(test1, alpha = 0.05, Letters = letters)
+
+# View the compact letter display
+print(letters_test1)
+
+
+#now need to add the tukeyd letters on to the plot
+upper_quartiles <- all95 %>%
+  group_by(Month, group) %>%
+  summarise(upper_q = quantile(predicted_HR, 0.75), .groups = "drop")  # Get the 75th percentile
+
+# Add Tukey's post hoc letters (from letters_test1)
+ p0<-p + 
+   geom_boxplot(position = position_dodge(width = 0.75)) +  # Ensure boxplots are dodged correctly
+   geom_text(data = letters_with_quartiles, 
+             aes(x = Month, 
+                 y = upper_q + 50,  # Adjust the y position to place the letters above the 75th percentile
+                 label = .group), 
+             vjust = -1.5, 
+             size = 4, 
+             show.legend = FALSE,
+             position = position_dodge(width = 0.75))  # Offset letters within groups
+
+ p0
+ ####################################################################################################################
+
+###################################
+library(ggplot2)
+library(dplyr)
+
+
+#######################################
+##copy of th eabove but for 50 percent
+
+all50<-filter(ALLHRCR_migres_NEW2025df, Range=="HR50" )
+
+shapiro.test(all50$HR)
+
+##transform the data for the model and interpret those reults
+#then backtransform the data nd plot for readers to get an understanding and address a revision comment
+
+
+
+#start with the home range 
+all50$CR_log <- log(all50$HR)
+
+ggplot(all50,
+       aes(x = CR_log)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") + 
+  ggtitle("Histogram of HR (Home Range)") +
+  theme_minimal()
+#good now 
+
+##run the GLMM model with year added in now 
+library("lme4")
+
+#comparing models 
+# Fit both models with REML = FALSE (i.e. ML estimation)
+model_random_CR <- lmer(CR_log ~ Month * group + Year + (1 | ID), data = all50, REML = FALSE)
+#model_no_random_CR <- lm(CR_log ~ Month * group + Year, data = all50, REML=FALSE)
+
+# Compare AIC values
+AIC(model_random_CR, model_no_random_CR)
+##AICc difference of 2 so keeping the GLMM random fixed effects model
+#diff is two again so sticking with random effects GLMM
+
+#flase is correct here becaseu we are interested in the fixed effects vs the random ones (would set to true if the case)
+summary(model_random_CR)
+
+
+# Load necessary libraries
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(multcomp)
+
+# Get estimated marginal means for the interaction between Month and group
+test1_CR <- lsmeans(model_random_CR, ~ Month * group, type = "response")
+summary(test1_CR)
+# Get compact letter display for the pairwise comparisons
+letters_test1_CR <- cld(test1_CR, alpha = 0.05, Letters = letters)
+head(model_random_CR)
+
+# Assuming you are working with a data frame named letters_test1_CR
+letters_test1_CR$emmean_backtransformed <- exp(letters_test1_CR$emmean)
+letters_test1_CR$lower.CL_backtransformed <- exp(letters_test1_CR$lower.CL)
+letters_test1_CR$upper.CL_backtransformed <- exp(letters_test1_CR$upper.CL)
+
+# Check the table
+head(letters_test1_CR)
+
+# Add the table to the Word document
+doc<-read_docx()
+head(letters_test1_CR)
+letters_test1_CR <- letters_test1_CR %>%
+  mutate(Month = factor(Month, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))) %>%
+  arrange(Month, group, emmean, SE, df, lower.CL, upper.CL, emmean_backtransformed, lower.CL_backtransformed, upper.CL_backtransformed, .group)  # Sorting by Range, group, Year, and Month
+
+doc <- doc %>%
+  body_add_table(letters_test1_CR, style = "table_template")
+
+# Save the Word document
+print(doc, target = "letters_test1_CR.docx")
+
+
+all50$Month <- factor(all50$Month, levels = c("January", "February", "March", "April", "May", "June", 
+                                              "July", "August", "September", "October", "November", "December"))
+# Create a boxplot for back-transformed home range values by Month, with separate plots for each group
+pp<-ggplot(all50, aes(x = Month, y = predicted_CR, fill = group)) +
+  scale_fill_manual(values = c("migrant" = "#ff7f0e", "resident" = "#1f77b4")) +  # Use scale_fill_manual for boxplot colors
+  geom_boxplot() +
+ geom_errorbar(data = letters_test1_CR, aes(y = emmean_backtransformed , ymin = lower.CL_backtransformed, ymax = upper.CL_backtransformed), 
+                width = 0.5, 
+                linewidth= 0.7,
+              position = position_dodge(width = 0.75), 
+                color = "black") +  # Add summarized error bars
+  labs(x = "Month",
+        y = expression("Back-transformed km"^2~"Core Range (50%)"), 
+       fill = "Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=12), 
+        axis.title.x=element_text(size=12), 
+        axis.text.y=element_text(size=12), 
+        axis.title.y=element_text(size=12), 
+        legend.title = element_text(size=12), 
+        legend.text=element_text(size=12), 
+        legend.position = "none")
+
+
+pp
+
+# Add Tukey's post hoc letters (from letters_test1)
+pp1<-pp + geom_text(data = letters_test1_CR, 
+              aes(x = Month, 
+                  y = upper.CL_backtransformed,
+                  label = .group),  # Adjust y position slightly above the boxplot
+              vjust = -0.5, 
+              size = 4, 
+              show.legend = FALSE,
+   position = position_dodge(width = 0.75))
+
+pp1
+##
+#kinda working needs upper and lower confidence intervals so will need to backtransform those aswell for the plot
+#the letters are messy, maybe not include and only include in a table ?
+
+#for tommorrow 
+
+#finish the HR CR km2 plots with tukets letters?
+#need to update the model results in supp materials
+#update other table
+#redo the figure with the change colors here maybe do a gray background ?
+
+#document the changes that were done to the model rerun and make sure its explained to reviewers and in text
+#update the smoothing paramerets
+#see what text needs to change based on the new updated results, March stands out to me...
+
+#address any other reviewer comments 
+
+
+#could look at doing a similar model of the latitude range? 
+
+cmbdplotGLMM<-p0/pp1
+
+ggsave("fig3_CJZ.png", plot = cmbdplotGLMM, dpi = 300, width = 12, height = 10)
+
+
+
+####looking to model the latitudinal location now which I wasnt able to before but was suggested by mike
+####################
+##still getting bad models that are not fitting the data correctly
+#convergence issues with bad looking residual plots 
+#something we could revist later?
+
+head(all95)
+
+#convert from utm 
+library(sf)
+
+# Convert UTM to lat/lon (WGS84)
+utm_sf <- st_as_sf(all95, coords = c("long", "lat"), crs = "EPSG:32614")  # UTM Zone 14 (Northern Hemisphere)
+
+# Transform to WGS84 (EPSG:4326 for Latitude/Longitude)
+lat_lon_sf <- st_transform(utm_sf, crs = 4326)
+
+# View the result
+lat_lon_sf
+# Extract the coordinates
+lat_lon_data <- st_coordinates(lat_lon_sf)
+lat_lon_data
+all95$latitude <- lat_lon_data[, 2]  # Latitude (Y)
+all95$longitude <- lat_lon_data[, 1]  # Longitude (X)
+
+shapiro.test(all95$latitude)
+hist(all95$latitude)
+
+##transform the data for the model and interpret those reults
+#then backtransform the data nd plot for readers to get an understanding and address a revision comment
+
+
+
+#start with the home range 
+all95$latitude_sqrt <- sqrt(all95$latitude)
+
+ggplot(all95,
+       aes(x = latitude_sqrt)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") + 
+  ggtitle("Histogram of HR (Home Range) latitude") +
+  theme_minimal()
+#gdata is not trandforming to be normal
+
+gamma_model <- glmmTMB(latitude ~ Month*group+ (1|ID), data = all95, family = Gamma(link = "log"))
+AIC()
+
+simulationoutput_spec<-simulateResiduals(fittedModel=gamma_model,quantreg=T)
+
+plot(simulationoutput_spec, quantreg=T)
+testUniformity(simulationoutput_spec)
+summary(gamma_model)
+
+
+
+##run the GLMM model with year added in now 
+library("lme4")
+
+#comparing models 
+# Fit both models with REML = FALSE (i.e. ML estimation)
+model_no_random_CR <- lm(CR_log ~ Month * group + Year, data = all50, REML=FALSE)
+
+# Compare AIC values
+AIC(model_random_CR, model_no_random_CR)
+##AICc difference of 2 so keeping the GLMM random fixed effects model
+#diff is two again so sticking with random effects GLMM
+
+#flase is correct here becaseu we are interested in the fixed effects vs the random ones (would set to true if the case)
+summary(model_random)
+
+
+# Load necessary libraries
+library(lme4)
+library(emmeans)
+library(ggplot2)
+library(multcomp)
+
+# Get estimated marginal means for the interaction between Month and group
+test1_CR <- lsmeans(model_random_CR, ~ Month * group, type = "response")
+
+# Get compact letter display for the pairwise comparisons
+letters_test1_CR <- cld(test1_CR, alpha = 0.05, Letters = letters)
+head(letters_test1_CR)
+
+# Assuming you are working with a data frame named letters_test1_CR
+letters_test1_CR$emmean_backtransformed <- exp(letters_test1_CR$emmean)
+letters_test1_CR$lower.CL_backtransformed <- exp(letters_test1_CR$lower.CL)
+letters_test1_CR$upper.CL_backtransformed <- exp(letters_test1_CR$upper.CL)
+
+# Check the table
+head(letters_test1_CR)
+
+
+
+
+all50$Month <- factor(all50$Month, levels = c("January", "February", "March", "April", "May", "June", 
+                                              "July", "August", "September", "October", "November", "December"))
+# Create a boxplot for back-transformed home range values by Month, with separate plots for each group
+pp<-ggplot(all50, aes(x = Month, y = predicted_CR, fill = group)) +
+  scale_fill_manual(values = c("migrant" = "#ff7f0e", "resident" = "#1f77b4")) +  # Use scale_fill_manual for boxplot colors
+  geom_boxplot() +
+ geom_errorbar(data = letters_test1_CR, aes(y = emmean_backtransformed , ymin = lower.CL_backtransformed, ymax = upper.CL_backtransformed), 
+                width = 0.5, 
+                linewidth= 0.7,
+              position = position_dodge(width = 0.75), 
+                color = "black") +  # Add summarized error bars
+  labs(x = "Month",
+        y = expression("Back-transformed km"^2~"Core Range (50%)"), 
+       fill = "Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=12), 
+        axis.title.x=element_text(size=12), 
+        axis.text.y=element_text(size=12), 
+        axis.title.y=element_text(size=12), 
+        legend.title = element_text(size=12), 
+        legend.text=element_text(size=12), 
+        legend.position = "none")
+
+
+pp
+
+# Add Tukey's post hoc letters (from letters_test1)
+pp1<-pp + geom_text(data = letters_test1_CR, 
+              aes(x = Month, 
+                  y = upper.CL_backtransformed,
+                  label = .group),  # Adjust y position slightly above the boxplot
+              vjust = -0.5, 
+              size = 4, 
+              show.legend = FALSE,
+   position = position_dodge(width = 0.75))
+
+pp1
+
+
+

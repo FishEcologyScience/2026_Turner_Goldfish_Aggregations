@@ -1,0 +1,52 @@
+######################
+###
+### Hamilton Harbour 
+### Acoustic telemetry
+### Goldfish
+
+#######################
+library(rgdal)
+library(sp)
+library(sf)
+library(ggplot2)
+
+library(dplyr)       # For data manipulation
+library(KernSmooth)  # For 2D kernel density estimation
+library(raster)      # For raster operations
+library(viridis)     # For color palettes
+library(lubridate)   # For date handling
+library(patchwork)
+
+#add in polygon shapeile first
+###need to convert to lat long from UTMS or points
+shorelinemap <- st_read("data/lakeontarionorthshoreline/LakeOntShoreline_MajorWaters.shp")
+
+ggplot(shorelinemap) +
+  geom_sf(fill = "lightblue", color = "black", size = 0.5) +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 8))
+
+
+# Now use geom_polygon
+ggplot(shoreline_df, aes(x = lon, y = lat, group=L2)) +
+  geom_polygon(fill = "lightblue", color = "darkblue") +
+  coord_equal() +
+  theme_minimal()
+
+
+#GCzoom in 
+x_limits_GC <- c(-79.891, -79.88)  # Define your desired range for x-axis
+y_limits_GC <- c(43.28, 43.291)  # Define your desired range for y-axis
+
+
+################
+# Plot the shapefile with specified x and y limits
+CarrollsBay<-ggplot(shorelinemap) +
+  geom_sf(fill="lightgrey", color="black") +
+  coord_sf(xlim = x_limits_GC, ylim = y_limits_GC) +
+  theme_minimal()
+
+plot(CarrollsBay)
+
+################################
+

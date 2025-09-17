@@ -1,0 +1,598 @@
+library(dplyr)
+library(zoo)
+library(tidyr)
+library(tidyr)
+# Sample data structure
+# acoustic_data <- data.frame(
+#   animal_id = c("A", "A", "A", "B", "B"),
+#   detection_timestamp = as.POSIXct(c("2024-09-10 12:00:00", "2024-09-10 14:00:00", "2024-09-11 10:00:00",
+#                                      "2024-09-10 09:00:00", "2024-09-12 15:00:00")),
+#   station_no = c("S1", "S1", "S2", "S3", "S4")
+# )
+
+
+setwd("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish")
+goldfish204<-readRDS("HHGOLDFISH_detections_clipped_dead_filtered_firstwoweeksremoved_2015-2025_correct.rds")
+
+#remove animal ID and sub in that for the tag.sn
+goldfish204_1 <- goldfish204[, -1]
+colnames(goldfish204_1)[colnames(goldfish204_1) == "tag_serial_number"] <- "animal_id"
+unique(goldfish204_1$animal_id)
+
+#Extract the date from the timestamp
+goldfish204_2 <- goldfish204_1 %>%
+  mutate(date = as.Date(detection_timestamp_utc))
+
+
+
+#Get the most frequent station per animal per day
+daily_location <- goldfish204_2 %>%
+  group_by(animal_id, date) %>%
+  count(station_no, sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(animal_id, date, station_no)
+
+#Create a sequence of all dates for each individual
+full_dates <- daily_location %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+dplyr::select(animal_id, date)
+#Merge full dates with daily location data and carry forward the last known location
+final_locations <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(station_no = zoo::na.locf(station_no, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+# View the final result
+print(final_locations)
+
+
+# Check the result of the join to make sure station_no is included
+full_dates <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date"))
+
+# Check if station_no exists
+print(head(full_dates))  # Inspect the result
+# Proceed if station_no is present
+if ("station_no" %in% colnames(full_dates)) {
+  final_locations <- full_dates %>%
+    group_by(animal_id) %>%
+    arrange(date) %>%
+    mutate(station_no = zoo::na.locf(station_no, na.rm = FALSE)) %>%  # Carry forward last known location
+    ungroup()
+} else {
+  stop("station_no column not found after the join")
+}
+
+write.csv(full_dates, "Id_date_recnumALL2022-2024_updated.csv")
+
+#daily proportional activity
+
+library(dplyr)
+#Count the total number of individuals detected per day
+total_per_day <- final_locations %>%
+  group_by(date) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per day
+count_per_receiver <- final_locations %>%
+  group_by(date, station_no) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions <- count_per_receiver %>%
+  left_join(total_per_day, by = "date") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+# View the result
+print(proportions)
+
+     
+colnames(proportions)
+#bind back to larger telem file need to have deploy lat and deploy lons attached
+
+proportions_daily_locations <- proportions %>%  
+dplyr::select(date, station_no, 
+      individuals_at_receiver,total_individuals, 
+      proportion)\
+
+
+#receiversHAM_WLN <- data.frame(receiversHAM_WLN)
+
+proportions_daily_locations <- data.frame(proportions_daily_locations)
+
+HAM_rec <- GLATOS_receiverLocations_20250109_212456 %>%
+  filter(glatos_array == "HAM")
+write.csv(HAM_rec, "ham_rec_locs_upto2024.csv")
+
+unique(GLATOS_receiverLocations_20250109_212456$glatos_array)
+
+HAM_rec$station_no<-as.numeric(HAM_rec$station_no)
+
+proportions_daily_locations$station_no<-as.numeric(proportions_daily_locations$station_no)
+
+#will remove if there are duplicates in receiver file
+receiversHAM_dupsremoved <- HAM_rec %>% distinct(station_no, .keep_all = TRUE)
+
+
+
+
+New_bindedproportions1 <- proportions_daily_locations %>% left_join (receiversHAM_dupsremoved, by="station_no")
+#could we do the same idea for depth and temperatuer aswell?
+
+
+
+
+#now make a plot of one of them, bubble style plot.. 
+#then can just add an animation feature to the plot so taht it can go through daily proportional use 
+
+
+plot(shorelinemap)
+
+write.csv(New_bindedproportions1, "rec_props2022-2024_updated.csv")
+
+#base bubbleplot code, now want to break it up into daily.. and then creat an animation 
+
+#entire time series we want to use (up until 2023)
+New_bindedproportions1$date <- as.POSIXct(New_bindedproportions1$date, format = "%Y-%m-%d")
+head(New_bindedproportions1)
+detections_bubble_plottt<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "right") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+anim_save("proportion_rec_2022-2024_eachday_updated.mp4", 
+          animation = detections_bubble_plottt, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+##use this data but make a heatmap instead
+
+library(ggplot2)
+library(dplyr)
+colnames(New_bindedproportions1)
+
+# Example: Plot heatmap of receiver usage over time
+heatmap1 <- ggplot() +
+  # Add shoreline map first
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "lightblue3") +
+  # Ensure data is passed into ggplot() correctly
+  geom_tile(data = New_bindedproportions1, aes(x = date, y = station_no, fill = proportion)) +
+  # Adjust color scale
+  scale_fill_viridis_c() +  
+  # Set axis limits
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  # Add labels and themes
+  labs(title = "Receiver Proportions Over Time",
+       x = "Date",
+       y = "Receiver ID",
+       fill = "Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Print the plot
+print(heatmap1)
+
+
+
+#this would be a really cool plot if we could group the receivers together into chunks like west end gc etc. then get
+#proportional activity then make this plot with grouping on the y and date on the x 
+#also maybe even just for the grindstone receivers aswell ? seperated out ???
+New_bindedproportions1$date <- as.Date(New_bindedproportions1$date, format = "%Y-%m-%d")  # Adjust format if necessary
+New_bindedproportions1$station_no <- as.factor(New_bindedproportions1$station_no)
+
+ heatmap1 <- ggplot(New_bindedproportions1, aes(x = date, y = station_no, fill = proportion)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  
+  # Set bi-monthly breaks with year in label
+  scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +
+  
+  # Set the Y-axis as a factor for station numbers
+  scale_y_discrete(breaks = unique(New_bindedproportions1$station_no)) +
+  
+  labs(title = "Station Proportions Over Time",
+       x = "Date",
+       y = "Station #",
+       fill = "Proportion") +
+  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate X-axis labels for readability
+
+print(heatmap1)
+
+
+
+##############################################
+##propotional investigation but grouped receivers 
+unique(goldfish204_2$station_no)
+
+ham044 <- HAM_rec %>%
+   filter(station_no == "44")
+#says this is showing up twice we need to plot to confirm 
+ham044plot<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=ham044, aes(x=deploy_long, y=deploy_lat))
+
+
+library(dplyr)
+
+goldfish204_2$rec_group <- case_when(
+  goldfish204_2$station %in% c("HAM-052", "HAM-053", "HAM-054", "HAM-055", "HAM-056", "HAM-057", "HAM-011", "HAM-005", "HAM-016") ~ "Piers 5-7",
+  goldfish204_2$station %in% c("HAM-030", "HAM-031", "HAM-032", "HAM-042", "HAM-043", "HAM-044", "HAM-065", "HAM-096", "HAM-098", "HAM-095", "HAM-094", "HAM-093", "HAM-088", "HAM-090", "HAM-092", "HAM-091", "HAM-089", "HAM-097") ~ "Cootes Paradise",
+  goldfish204_2$station %in% c("HAM-029", "HAM-033", "HAM-059", "HAM-060", "HAM-061", "HAM-062", "HAM-064", "HAM-066", "HAM-067", "HAM-068", "HAM-086", "HAM-087") ~ "Grindstone",
+  goldfish204_2$station %in% c("HAM-048", "HAM-018", "HAM-028", "HAM-037", "HAM-063", "HAM-024", "HAM-027", "HAM-026", "HAM-051", "HAM-036", "HAM-070", "HAM-071", "HAM-099", "HAM-072", "HAM-073", "HAM-074", "HAM-075", "HAM-076", "HAM-079", "HAM-078", "HAM-077", "HAM-085", "HAM-084", "HAM-083", "HAM-082", "HAM-081") ~ "West End",
+  goldfish204_2$station %in% c("HAM-034", "HAM-009") ~ "Slip",
+  goldfish204_2$station %in% c("HAM-008", "HAM-010", "HAM-035") ~ "Windermere",
+  goldfish204_2$station %in% c("HAM-013", "HAM-003", "HAM-002", "HAM-012", "HAM-045", "HAM-006", "HAM-025", "HAM-058", "HAM-001") ~ "East End",
+  goldfish204_2$station %in% c("HAM-022") ~ "Outside Harbour",
+  goldfish204_2$station %in% c("HAM-046", "HAM-047", "HAM-007", "HAM-015", "HAM-014", "HAM-023") ~ "North shore",
+  goldfish204_2$station %in% c("HAM-021", "HAM-004", "HAM-017", "HAM-020", "HAM-019", "HAM-039", "HAM-041") ~ "Central",
+  TRUE ~ NA_character_ # Default to NA if no match
+)
+unique(goldfish204_2$rec_group)
+
+
+##map a map with the colors labelled se we can see what the groups are 
+colnames(goldfish204_2)
+
+Ham_rec_colored <- HHmap +
+  geom_point(data = goldfish204_2, aes(x = deploy_long, y = deploy_lat, color = factor(rec_group_adjusted_new)), size = 3) +
+  geom_text(data = goldfish204_2, aes(x = deploy_long, y = deploy_lat, label = station_no, color = factor(rec_group_adjusted_new)), 
+           size = 4, vjust = -1, fontface = "bold") +
+  scale_color_viridis_d() +
+  labs(title = "Grouped Receivers",
+       x = "Longitude",
+       y = "Latitude",
+       color = "Year") +
+  theme_minimal()
+
+Ham_rec_colored
+
+#####################
+
+# Filter rows where rec_group is NA
+#unassigned_stations <- goldfish204_2 %>% 
+ # filter(is.na(rec_group))
+# View the resulting dataframe
+#print(unassigned_stations)
+#unique(unassigned_stations$station)
+#unassigned_stations_recs <- HAM_rec %>%
+#filter(station_no %in% c("76", "77", "73", "74", "79", 
+ #                       "78", "72", "75", "82", "81", 
+  #                      "85", "84", "83", "94"))
+#unique(unassigned_stations_recs$station_no)
+#now plot so we know where they are so we can assign them 
+#unassigned <- ggplot() + 
+ # geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+#  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+ # geom_point(data = unassigned_stations_recs, aes(x = deploy_long, y = deploy_lat)) +
+  #geom_text(data = unassigned_stations_recs, aes(x = deploy_long, y = deploy_lat, label = station_no), 
+   #         vjust = -1, hjust = 0.5, color = "black", size = 3)  # Adjust the positioning and appearance of the labels
+#############################################
+#redoing the daily propotional code arcoss all receivers to be just across the groups
+#will be unable to do an animation style plot i think
+####################################################
+
+
+#remove animal ID and sub in that for the tag.sn
+goldfish204_1 <- goldfish204[, -1]
+colnames(goldfish204_1)[colnames(goldfish204_1) == "tag_serial_number"] <- "animal_id"
+unique(goldfish204_2$animal_id)
+
+#Extract the date from the timestamp
+goldfish204_2 <- goldfish204_1 %>%
+  mutate(date = as.Date(detection_timestamp_utc))
+
+#Get the most frequent station per animal per day
+daily_location <- goldfish204_2 %>%
+  group_by(animal_id, date) %>%
+  count(rec_group, sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(animal_id, date, rec_group)
+
+#Create a sequence of all dates for each individual
+full_dates <- daily_location %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+dplyr::select(animal_id, date)
+#Merge full dates with daily location data and carry forward the last known location
+final_locations <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(rec_group = zoo::na.locf(rec_group, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+# View the final result
+print(final_locations)
+
+
+# Check the result of the join to make sure station_no is included
+full_dates <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date"))
+
+# Check if station_no exists
+print(head(full_dates))  # Inspect the result
+# Proceed if station_no is present
+if ("rec_group" %in% colnames(full_dates)) {
+  final_locations <- full_dates %>%
+    group_by(animal_id) %>%
+    arrange(date) %>%
+    mutate(rec_group = zoo::na.locf(rec_group, na.rm = FALSE)) %>%  # Carry forward last known location
+    ungroup()
+} else {
+  stop("rec_group column not found after the join")
+}
+
+write.csv(full_dates, "Id_date_recnum_recGROUPS2022-2024.csv")
+
+#daily proportional activity
+
+library(dplyr)
+#Count the total number of individuals detected per day
+total_per_day <- final_locations %>%
+  group_by(date) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per day
+count_per_receiver <- final_locations %>%
+  group_by(date, rec_group) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions <- count_per_receiver %>%
+  left_join(total_per_day, by = "date") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+# View the result
+print(proportions)
+
+     
+colnames(proportions)
+#bind back to larger telem file need to have deploy lat and deploy lons attached
+#proportions_daily_locations <- proportions %>%  
+#dplyr::select(date, station_no, 
+#      individuals_at_receiver,total_individuals, 
+#      proportion)\
+#receiversHAM_WLN <- data.frame(receiversHAM_WLN)
+
+
+
+write.csv(proportions, "rec_props_byGROUPING2022-2024.csv")
+
+##make the coooool plot
+
+proportions$date <- as.Date(proportions$date, format = "%Y-%m-%d")  # Adjust format if necessary
+proportions$rec_group <- as.factor(proportions$rec_group)
+
+ heatmap2 <- ggplot(proportions, aes(x = date, y = rec_group, fill = proportion)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  
+  # Set bi-monthly breaks with year in label
+  scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +
+  
+  # Set the Y-axis as a factor for station numbers
+  scale_y_discrete(breaks = unique(proportions$rec_group)) +
+  
+  labs(title = "",
+       x = "Date",
+       y = "Receiver group",
+       fill = "Proportion") +
+  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate X-axis labels for readability
+
+heatmap2
+
+
+
+
+###############################
+##spring 2022
+
+New_bindedproportions1_spawning2023<-New_bindedproportions1[New_bindedproportions1$date >= "2023-04-15" & 
+                                                                       New_bindedproportions1$date <= "2023-06-30",]
+
+
+
+
+detections_bubble_plottt_spring2022<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2022, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+# To render the animation
+proportions1<-animate(detections_bubble_plottt, renderer = gifski_renderer())
+#save as a av file
+library(av)
+
+proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("proportion_rec_spring2022.mp4", 
+          animation = detections_bubble_plottt_spring2022, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+             
+  ##spring 2022
+
+New_bindedproportions1_spring2023<-New_bindedproportions1[New_bindedproportions1$date >= "2023-02-28" & 
+                                                                       New_bindedproportions1$date <= "2023-06-30",]
+
+
+
+#entire time series we want to use (up until 2023)
+
+detections_bubble_plottt_spring2023<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2023, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+
+
+
+
+
+
+
+
+
+#if we did a grouping of receivers would also be good to rerun this with west end, GC, central, north, east
+#so we could see what proprtional daily activity looks like within grouping or areas of the harbour
+#station number is good for specific locations but could be good to look at it more in a general sense
+
+
+##proportional distribution in grindstone from 
+#march until August???
+
+#Get the most frequent station per animal per day
+
+#this is the right code but I need to look at 2022 and 2023 and 2024 as separate events 
+#will force a detection when not including the rest of the system 
+
+HH_GConly_spring2023only <- HH_GConly %>%
+  filter(detection_timestamp_utc >= as.POSIXct("2023-03-15") &
+         detection_timestamp_utc <= as.POSIXct("2023-06-30"))
+
+HH_GConly <- HH_GConly %>%
+  mutate(date = as.Date(detection_timestamp_utc))
+
+
+daily_location_GC <- HH_GConly %>%
+  group_by(animal_id, date) %>%
+  count(rec_group, sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(animal_id, date, rec_group)
+
+#Create a sequence of all dates for each individual
+full_dates_GC <- daily_location_GC %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+dplyr::select(animal_id, date)
+#Merge full dates with full_dates_GC location data and carry forward the last known location
+final_locations_GC <- full_dates_GC %>%
+  left_join(daily_location_GC, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(rec_group = zoo::na.locf(rec_group, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+#Count the total number of individuals detected per day
+total_per_day_GC <- final_locations_GC %>%
+  group_by(date) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per day
+count_per_receiver_GC <- final_locations_GC %>%
+  group_by(date, rec_group) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions_GC <- count_per_receiver_GC %>%
+  left_join(total_per_day_GC, by = "date") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+ heatmap2 <- ggplot(proportions_GC, aes(x = date, y = rec_group, fill = proportion)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  
+  # Set bi-monthly breaks with year in label
+  scale_x_date(date_breaks = "2 months", date_labels = "%b %Y") +
+  
+  # Set the Y-axis as a factor for station numbers
+  scale_y_discrete(breaks = unique(proportions_GC$rec_group)) +
+  
+  labs(title = "",
+       x = "Date",
+       y = "Receiver group",
+       fill = "Proportion") +
+  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Rotate X-axis labels for readability
+
+heatmap2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#####################################################
+##two fish that went into cootes paradise 
+#
+
+
+library(zoo)  # For rolling mean
+
+data <- data %>%
+  arrange(Date) %>%
+  mutate(Rolling_Proportion = rollmean(Daily_Proportion, k = 7, fill = NA, align = "right"))
+
+ggplot(data, aes(x = Date)) +
+  geom_line(aes(y = Daily_Proportion), alpha = 0.3) +  # Raw data (faded)
+  geom_line(aes(y = Rolling_Proportion), color = "blue", size = 1) +  # Smoothed
+  labs(title = "Daily vs. Smoothed Proportional Detections",
+       y = "Proportional Detection", x = "Date") +
+  theme_minimal()
+
+
+
+
+
+####################################

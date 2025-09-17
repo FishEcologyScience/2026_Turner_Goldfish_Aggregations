@@ -1,0 +1,350 @@
+library(dplyr)
+library(zoo)
+
+##################
+
+setwd("C:/Users/TURNERN/Desktop/HH goldfish/telemetryR/")
+GF202223tags<-readRDS("tempdepthdetectionsALL_2022-2023.rds")
+
+unique(GF202223tags$station_no)
+
+#Extract the date from the timestamp
+HH_GF_2022 <- GF202223tags %>%
+  mutate(date = as.Date(detection_timestamp_utc))
+
+#Get the most frequent station per animal per day
+daily_location <- HH_GF_2022 %>%
+  group_by(animal_id, date) %>%
+  count(station_no, sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(animal_id, date, station_no)
+
+#Create a sequence of all dates for each individual
+full_dates <- daily_location %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+dplyr::select(animal_id, date)
+#Merge full dates with daily location data and carry forward the last known location
+final_locations <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(station_no = zoo::na.locf(station_no, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+# View the final result
+print(final_locations)
+
+
+# Check the result of the join to make sure station_no is included
+full_dates <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date"))
+
+# Check if station_no exists
+print(head(full_dates))  # Inspect the result
+# Proceed if station_no is present
+if ("station_no" %in% colnames(full_dates)) {
+  final_locations <- full_dates %>%
+    group_by(animal_id) %>%
+    arrange(date) %>%
+    mutate(station_no = zoo::na.locf(station_no, na.rm = FALSE)) %>%  # Carry forward last known location
+    ungroup()
+} else {
+  stop("station_no column not found after the join")
+}
+
+#each individual is assigned a daily location station_no here
+write.csv(full_dates, "Id_date_recnumALL2022-2023.csv")
+full_dates<-Id_date_recnumALL2022_2023
+#daily proportional activity
+
+library(dplyr)
+#Count the total number of individuals detected per day
+total_per_day <- final_locations %>%
+  group_by(date) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per day
+count_per_receiver <- final_locations %>%
+  group_by(date, station_no) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions <- count_per_receiver %>%
+  left_join(total_per_day, by = "date") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+# View the result
+print(proportions)
+
+     
+colnames(proportions)
+#bind back to larger telem file need to have deploy lat and deploy lons attached
+
+proportions_daily_locations <- proportions %>%  
+dplyr::select(date, station_no, 
+      individuals_at_receiver,total_individuals, 
+      proportion)
+
+
+receiversHAM_WLN <- data.frame(receiversHAM_WLN)
+proportions_daily_locations <- data.frame(proportions_daily_locations)
+
+receiversHAM_WLN$station_no<-as.numeric(receiversHAM_WLN$station_no)
+
+proportions_daily_locations$station_no<-as.numeric(proportions_daily_locations$station_no)
+
+#will remove if there are duplicates in receiver file
+receiversHAM_WLN_dupsremoved <- receiversHAM_WLN %>% distinct(station_no, .keep_all = TRUE)
+
+
+
+
+New_bindedproportions1 <- proportions_daily_locations %>% left_join (receiversHAM_WLN_dupsremoved, by="station_no")
+#could we do the same idea for depth and temperatuer aswell?
+
+
+
+
+#now make a plot of one of them, bubble style plot.. 
+#then can just add an animation feature to the plot so taht it can go through daily proportional use 
+
+
+plot(shorelinemap)
+
+write.csv(New_bindedproportions1, "rec_props2022-2023.csv")
+#base bubbleplot code, now want to break it up into daily.. and then creat an animation 
+
+#entire time series we want to use (up until 2023)
+rec_props2022_2023$date <- as.POSIXct(rec_props2022_2023$date, format = "%Y-%m-%d")
+head(rec_props2022_2023)
+detections_bubble_plottt<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=rec_props2022_2023, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+# To render the animation
+proportions1<-animate(detections_bubble_plottt, renderer = gifski_renderer())
+#save as a av file
+library(av)
+
+proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("proportion_rec_2022-2023_eachday.gif", 
+          animation = proportions1, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+             
+             
+###############################
+##spring 2022
+
+New_bindedproportions1_spring2022<-New_bindedproportions1[New_bindedproportions1$date >= "2022-02-28" & 
+                                                                       New_bindedproportions1$date <= "2022-06-30",]
+
+
+
+
+detections_bubble_plottt_spring2022<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2022, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+# To render the animation
+proportions1<-animate(detections_bubble_plottt, renderer = gifski_renderer())
+#save as a av file
+library(av)
+
+proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("proportion_rec_spring2022.mp4", 
+          animation = detections_bubble_plottt_spring2022, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+
+             
+  ##spring 2022
+
+New_bindedproportions1_spring2023<-New_bindedproportions1[New_bindedproportions1$date >= "2023-02-28" & 
+                                                                       New_bindedproportions1$date <= "2023-06-30",]
+
+
+
+#entire time series we want to use (up until 2023)
+
+detections_bubble_plottt_spring2023<-ggplot() + 
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill="lightblue3") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  geom_point(data=New_bindedproportions1_spring2023, aes(x=deploy_long, y=deploy_lat, size=proportion, color=proportion))+
+   scale_color_gradient(low = "yellow", high = "red") +
+   labs(title = "Day: {frame_time}") +  
+    theme(legend.position = "none") +# Display the day in the title
+  transition_time(as.Date(date)) + 
+  #transition_states(as.Date(date), state_length = 1, transition_length = 1) +         # Replace 'date' with your actual column name representing the date
+  ease_aes('linear')                    # Smooth transitions between frames
+
+   
+# To render the animation
+proportions1<-animate(detections_bubble_plottt, renderer = gifski_renderer())
+#save as a av file
+library(av)
+
+proportions1 <- animate(detections_bubble_plottt, nframes = length(unique(New_bindedproportions1$date)), fps = 1)
+
+
+anim_save("proportion_rec_spring2023.mp4", 
+          animation = detections_bubble_plottt_spring2023, 
+          renderer = av_renderer(),  # Using av_renderer to export as mp4
+          fps = 1 , 
+          # Adjust fps (frames per second) to control speed
+          width = 1920,              # Set width for higher resolution (e.g., Full HD)
+          height = 1080,             # Set height for higher resolution
+          res = 300,                 # Adjust resolution (DPI) for better quality
+          bitrate = "2000k")         # Increase bitrate for higher quality
+  
+
+##above will require some data filtering, such as removing dead individuals, removing first two weeks of newly 
+#tagged individuals, clipping off end of tags that are sitting and presumed dead - see summarizedetections_uniqueindividuals code
+
+
+
+
+
+##weekly proportions
+#a daily proportion might not work well for a GLMM
+#plus add season, air temp, fish temp, location area ? (CP, GC, outer GC, west end, north, central, east end????)
+
+#could also calculate it out to be the location ares, proportion of detections within those areas weekly ?
+#that could be like a broad view of distribution and aggregations, this could do a "zoomed in version" later
+
+#################
+##pulled from above
+#Get the most frequent station per animal per day
+daily_location <- HH_GF_2022 %>%
+  group_by(animal_id, date) %>%
+  count(station_no, sort = TRUE) %>%
+  slice(1) %>%   # Get the station with the highest count
+  ungroup() %>%
+  dplyr::select(animal_id, date, station_no)
+
+#Create a sequence of all dates for each individual
+full_dates <- daily_location %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+dplyr::select(animal_id, date)
+#Merge full dates with daily location data and carry forward the last known location
+final_locations <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(station_no = zoo::na.locf(station_no, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+#make the date column into a date feature
+final_locations$date<-as.Date(final_locations$date)
+
+#now take the final locations daily file and summarize by week
+GF_weely <- final_locations %>%
+  mutate(week = floor_date(date, "week"))
+
+#get rid of that first day being its own week 
+final_locations_week_filtered <- GF_weely %>%
+  filter(date != as.Date("2022-01-01"))
+
+final_locations_week_filtered$week<-as.Date(final_locations_week_filtered$week)
+
+str(final_locations_week_filtered)
+
+weekly_events <- final_locations_week_filtered %>%
+  group_by(animal_id, week, station_no) %>%
+  tally(name = "count") %>%  # Count occurrences
+  ungroup() %>%
+  arrange(animal_id, week, desc(count)) %>%
+  group_by(animal_id, week) %>%
+  slice(1) %>%  # Select the station_no with the highest count for each animal_id and week
+  ungroup() %>%
+  dplyr::select(animal_id, week, station_no)  # Use dplyr::select explicitly
+
+library(dplyr)
+library(lubridate)
+
+#weekly proportional activity
+
+library(dplyr)
+#Count the total number of individuals detected per week
+total_per_week <- weekly_events %>%
+  group_by(week) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per week
+count_per_receiver_week <- weekly_events %>%
+  group_by(week, station_no) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions_weekly <- total_per_week %>%
+  left_join(count_per_receiver_week, by = "week") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+
+write.csv(proportions_weekly, "weekly_proportions_202223.csv")
+
+
+
+####GLMMs?
+#add station groupings
+#seasons
+#air temperature
+
+install.packages("rnoaa")
+library("weatherData")
+
+
+#break out into seasons
+#plot receiver hot spots for seasonality ?
+#proportional bubble plots based on seasonality ?
+#
+
+
+#group receivers together to determine "residency in specific areas"
+#Cootes paradise
+#west end nearshore (cut off of a specific depth?)
+#west end offshore
+#Grindstone 
+#Northshore nearshore
+#indian creek 
+#east end near shore
+#central including the receivers near industry?
+

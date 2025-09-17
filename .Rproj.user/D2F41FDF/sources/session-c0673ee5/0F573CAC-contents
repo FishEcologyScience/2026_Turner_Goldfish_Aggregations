@@ -1,0 +1,546 @@
+### Find refsites_filtered under R code HH_Ref_Hurdles
+#this file C:\Users\TURNERN\Documents\HH\HH_base dataset
+
+  ##add in goldfish data efishing 
+
+GF<-dplyr::filter(refsites_filtered, Common_Name %in% c("Goldfish"))
+
+
+
+ GFham<-dplyr::filter(GF, RegionalZone %in% c("HAMH"))
+#effort as an hour value ~5min per transect
+    
+GFham$Effort_time <- 0.083 
+## 
+
+
+#from 2010 onwards
+GFham <- dplyr::filter(GFham, Year >=2016)
+unique(GFham$Year)
+
+ GFham1 <- dplyr::filter(GFham, Season %in% c("Summer"))
+ unique(GFham1$Season)
+
+
+colnames(GFham1)
+#add year in if you want it year by year 
+# Step 1: Summarize the total number of individuals captured per transect per year
+abundance_summary <- GFham1 %>%
+  group_by(Transect) %>%
+  summarize(total_abundance = sum(Abundance, na.rm = TRUE), .groups = 'drop')
+
+
+# Step 2: Calculate the GFham1 effort per transect per year
+effort_summary <- GFham1 %>%
+  group_by(Transect) %>%
+  summarize(total_effort = sum(Effort_time, na.rm = TRUE))
+
+# Step 3: Combine abundance and effort dataframes
+cpue_data_gf <- abundance_summary %>%
+  left_join(effort_summary, by = c("Transect")) %>%
+  mutate(CPUE = total_abundance / total_effort)
+
+# View the result
+print(cpue_data_gf)
+
+#need to bind back to transect locations then we can plot it up 
+
+cpue_data_withtransectdetails <- cpue_data_gf %>%
+  left_join(HH_TransectDetails_25May2022, by = c("Transect"))
+
+
+CPUEgoldfish<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "darkgrey") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal() + 
+  geom_point(data=cpue_data_withtransectdetails, aes(x=Longitude, y=Latitude, size=CPUE),color="blue", alpha=0.4)
+
+
+##
+
+
+##########test of LMB to comapre to Larocque paper result
+#zero values are plotting so probably want to just remove those from the dataframe then rerun the map 
+
+
+     LMB<-dplyr::filter(refsites_filtered, Common_Name %in% c("Largemouth bass"))
+unique(refsites_filtered$Common_Name)
+
+
+    LMBham<-dplyr::filter(LMB, RegionalZone %in% c("HAMH"))
+#effort as an hour value ~5min per transect
+    
+LMBham$Effort_time <- 0.083 
+## 
+
+
+#from 2010 onwards
+ GFham <- dplyr::filter(GFham, Year >=2016)
+unique(GFham$Year)
+
+ GFham1 <- dplyr::filter(GFham, Season %in% c("Summer"))
+ unique(GFham1$Season)
+
+
+colnames(GFham1)
+#Summarize the total number of individuals captured per transect per year
+abundance_summary <- GFham1 %>%
+  group_by(Transect, Year) %>%
+  summarize(total_abundance = sum(Abundance, na.rm = TRUE), .groups = 'drop')
+
+
+# Step 2: Calculate the GFham1 effort per transect per year
+effort_summary <- GFham1 %>%
+  group_by(Transect, Year) %>%
+  summarize(total_effort = sum(Effort_time, na.rm = TRUE))
+
+# Step 3: Combine abundance and effort dataframes
+cpue_data_gf <- abundance_summary %>%
+  left_join(effort_summary, by = c("Transect")) %>%
+  mutate(CPUE = total_abundance / total_effort)
+
+# View the result
+print(cpue_data_gf)
+
+cpue_data <- GFham1 %>% 
+  # Group by year and Trip ID so that you can calculate CPUE for every trip in every year
+  group_by(Year,Transect) %>% 
+  # For each year and trip ID, calculate the CPUE for each trip by dividing the sum of the catch, converted from grams to kilograms, by the trip by the number of fishing hours
+  summarize(Trip_CPUE = sum(Abundance) / mean(Effort_time)) %>% 
+  # Next, just group by year so we can calculate median CPUE for each year across all trips in the year
+  group_by(Transect) %>% 
+  # Calculate median CPUE for each year
+  summarize(Median_CPUE_kg_hour = median(Trip_CPUE))
+
+
+
+
+#need to bind back to transect locations then we can plot it up 
+
+cpue_data_withtransectdetails <- cpue_data_gf %>%
+  left_join(HH_TransectDetails_25May2022, by = c("Transect"))
+
+
+CPUEgoldfish<-ggplot() +
+  geom_polygon(data = shorelinemap, aes(x = long, y = lat, group = group), fill = "darkgrey") +
+  coord_cartesian(xlim = x_limits_HHall, ylim = y_limits_HHall) +
+  theme_minimal() + 
+  geom_point(data=cpue_data_withtransectdetails, aes(x=Longitude, y=Latitude, size=CPUE),color="blue", alpha=0.4)
+
+
+##cpue_data_withtransectdetails<-GF_efishing_cpue_stanza4
+#plot with zeros removed 
+
+#################################################
+####only one occurance of a goldifhs coming up in the dataframe, not sure whats going on here
+####now do the same for trapnet data
+#also if this dataframe is from 2006 we could do the same for efishing? but for now we will just filter for P4 
+
+#dataframes are 
+#HH_MNR_TrapNet_2006_2021
+#HH_transectdetails
+colnames(HH_MNR_TrapNet_2006_2021)
+trapnet_goldfish<-dplyr::filter(HH_MNR_TrapNet_2006_2021, Common_Name=="goldfish")
+
+
+HH_MNR_TrapNet_2013on<-dplyr::filter(HH_MNR_TrapNet_2006_2021, Year >= 2013)
+
+#then filter out just the goldfish
+unique(HH_MNR_TrapNet_2006_2021$Common_Name)
+
+HH_MNR_TrapNet_2013on_goldfishonly<-dplyr::filter(HH_MNR_TrapNet_2013on, Common_Name=="Goldfish")
+
+
+#######################################################
+####same for RBG yoy electrofishing surveys 
+
+ggplot() +
+  geom_line(data = GF_fishway_catch, aes(x = Year, y = Count), size = 0.2, color = 'black') +  # Lines for fishway catch
+  geom_point(data = GF_fishway_catch, aes(x = Year, y = Count), size = 2, color = 'black', shape=1) +  # Points for fishway catch
+  geom_line(data = RBG_GF_removal, aes(x = Year, y = Count, color=Location), size = 0.2) +  # Lines for removal data
+  geom_point(data = RBG_GF_removal, aes(x = Year, y = Count, color=Location), size = 2) +  # Points for removal data
+  labs(
+    title = "Fishway Catch and Removal Count Over the Years",
+    x = "Year",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+
+combined_data <- merge(GF_fishway_catch, RBG_GF_removal, by = "Year", suffixes = c("_catch", "_removal"))
+
+# Fit a linear regression model
+model <- lm(Count_catch ~ Count_removal, data = combined_data)
+
+# Summary of the model
+summary(model)
+par(mfrow = c(2, 2))
+plot(model)
+
+####wilcox rank test between years of pre removal and during removal
+#add another column to the catch data for pre_removal and post_removal
+GF_fishway_catch <- GF_fishway_catch %>%
+  mutate(group = ifelse(Year <= 2011, "pre", "post"))
+
+wilcox.test(GF_fishway_catch, paired = TRUE)
+
+pre_values <- GF_fishway_catch$Count[GF_fishway_catch$group == "pre"]
+post_values <- GF_fishway_catch$Count[GF_fishway_catch$group == "post"]
+
+# Run the Wilcoxon signed-rank test
+test_result <- wilcox.test(pre_values, post_values, paired = TRUE)
+
+#should be paired? but here it isnt 
+#significant difference bewteen the pre and post.. but as a positive (catch went down in the post)
+#or negative (catch went up in the post)?
+
+
+
+####YOY efishing data 
+colnames(RBG_Electrofishing_Data_1994_2022)
+unique(RBG_Electrofishing_Data_1994_2022$Species)
+RBG_yoyefish<-dplyr::filter(RBG_GF_removal, Species=="Goldfish")
+
+
+ggplot() +
+  geom_line(data = RBG_yoyefish, aes(x = Year, y = Count), size = 0.2, color = 'black') +  # Lines for fishway catch
+  geom_point(data = RBG_yoyefish, aes(x = Year, y = Count), size = 2, color = 'black', shape=1) +  # Points for fishway catch
+ labs(
+    title = "YOY efish Catch RBG",
+    x = "Year",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+##
+ggplot() +
+  geom_line(data = GF_fishway_catch, aes(x = Year, y = Count), size = 0.2, color = 'black') +  # Lines for fishway catch
+  geom_point(data = GF_fishway_catch, aes(x = Year, y = Count), size = 2, color = 'black', shape=1) +  # Points for fishway catch
+    geom_line(data = RBG_yoyefish, aes(x = Year, y = Count), size = 0.2, color = 'purple') +  # Lines for fishway catch
+  geom_point(data = RBG_yoyefish, aes(x = Year, y = Count), size = 2, color = 'purple') +  # Points for fishway catch
+  labs(
+    title = "Fishway Catch and late summer efish catch (purple)",
+    x = "Year",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+##need to sum up the total fish removed from RBG as it aligns too well with the yoy catch data. likely fish remove dduring those sampling events
+RBG_GFremoval_summary<-RBG_GF_removal %>%
+  group_by(Species, Year) %>%
+  summarise(total_count = sum(Count, na.rm = TRUE))
+  
+RBG_GF_removal <- RBG_GF_removal %>%
+  mutate(Sum_Location = "RBG removal")
+
+GF_fishway_catch<-GF_fishway_catch %>%
+  mutate(Location="Fishway catch")
+
+#now plot these two 
+ggplot() +
+  geom_line(data = GF_fishway_catch, aes(x = Year, y = Count, color = 'Fishway catch'), size = 1) +  
+  geom_point(data = GF_fishway_catch, aes(x = Year, y = Count, color = 'Fishway catch'), size = 3, shape = 1) +  
+  geom_line(data = RBG_GFremoval_summary, aes(x = Year, y = total_count, color = 'RBG removal'), size = 1) +  
+  geom_point(data = RBG_GFremoval_summary, aes(x = Year, y = total_count, color = 'RBG removal'), size = 3) +  
+  
+  labs(
+    title = "Fishway Catch and RBG removal (all locations)",
+    x = "Year",
+    y = "Count"
+  ) + 
+  
+  # Fix scale_color_manual
+  scale_color_manual(
+    name = "Legend", 
+    values = c("Fishway catch" = "black", "RBG removal" = "red")
+  ) +
+  
+  theme_minimal()
+
+
+##fishway catch vs. yoy catch combined 
+RBG_efishyoy_cmbd<-RBG_yoyefish %>%
+  group_by(Species, Year) %>%
+  summarise(total_count = sum(Count, na.rm = TRUE))
+
+
+ggplot() +
+  geom_line(data = GF_fishway_catch, aes(x = Year, y = Count, color = 'Fishway catch'), size = 1) +  
+  geom_point(data = GF_fishway_catch, aes(x = Year, y = Count, color = 'Fishway catch'), size = 3, shape = 1) +  
+  geom_line(data = RBG_efishyoy_cmbd, aes(x = Year, y = total_count, color = 'YOY efish catch'), size = 1) +  
+  geom_point(data = RBG_efishyoy_cmbd, aes(x = Year, y = total_count, color = 'YOY efish catch'), size = 3) +  
+  
+  labs(
+    title = "Fishway Catch and YOY efish catch",
+    x = "Year",
+    y = "Count"
+  ) + 
+  
+  # Fix scale_color_manual
+  scale_color_manual(
+    name = "Legend", 
+    values = c("Fishway catch" = "black", "YOY efish catch" = "red")
+  ) +
+  
+  theme_minimal()
+efish
+
+
+########################
+##efish weight/length by year to see if sizes/cohorts have changed overtime
+
+efish_lengthweight<-merge(Efishing_HH_LengthWeights_Feb2024, Spdeets, by="Species")
+
+GF_LW<-dplyr::filter(efish_lengthweight, Common_Name %in% c("Goldfish"))
+unique(GF_LW$Location)
+
+#add in a column for the year 
+GF_LW$year <- format(as.Date(GF_LW$Date, format = "%m/%d/%Y"), "%Y")
+
+#two errors
+GF_LW[1255, 12] <- 307
+GF_LW[727, 12] <- 302
+
+
+#plot length and weights out and color it by the year 
+GFstats <- ggplot(GF_LW, aes(x = Length, y = Weight, color = factor(year))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + # Add lines of best fit (linear model)
+  theme_minimal()
+
+#filter data to include only fish captured since 2013 (P4)
+GF_LW_2013<-GF_LW %>% filter(year>=2013)
+unique(GF_LW_2013$year)
+GFstats1 <- ggplot(GF_LW_2013, aes(x = Length, y = Weight, color = factor(year))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + # Add lines of best fit (linear model)
+  theme_minimal()
+
+
+##fishway data
+
+RBG_GF_fishway<-dplyr::filter(RBG_BarrierData_1996_2023, Species %in% c("Goldfish"))
+unique(GF_LW$Location)
+colnames(RBG_GF_fishway)
+
+RBG_GF_fishway_noNA <- RBG_GF_fishway[!is.na(RBG_GF_fishway$`Length (mm)`), ]
+
+
+GF_fishway <- ggplot(RBG_GF_fishway_noNA, aes(x = `Length (mm)`, y = `Weight (g)`, color = factor(Year))) +
+  geom_point() +
+# geom_smooth(method = "lm", se = FALSE) + # Add lines of best fit (linear model)
+  theme_minimal()
+
+#two group of years
+# Create a new column to categorize years into two groups
+RBG_GF_fishway_noNA$Year_Group <- ifelse(RBG_GF_fishway_noNA$Year <= 2009, "1996-2009", "2010-2023")
+
+#replot
+GF_fishway1 <- ggplot(RBG_GF_fishway_noNA, aes(x = `Length (mm)`, y = `Weight (g)`, color = factor(Year_Group))) +
+  geom_point() +
+ geom_smooth(method = "lm", se = FALSE) + # Add lines of best fit (linear model)
+  theme_minimal()
+
+#could also plot year on the x and abundance on the y summed by year to include adults and incidentals seperate plus combined
+#might show a difference in age structure, smaller vs. larger
+
+#RBG GF fishway data have year and quantity (abundance)
+ggplot(RBG_GF_fishway, aes(x = Year, y = Quantity)) +
+  geom_line() +
+  theme_minimal()
+
+
+
+#filter dataframe to have a yearly sum
+fishway_GF_big<-RBG_GF_fishway %>% 
+         group_by(Year) %>% 
+         summarise(Count = sum(Quantity))
+
+##RBG incidental fish catch abundance 
+Fishway_incidentals<-dplyr::filter(RBG_BarrierData_1996_2023, Species %in% c("Goldfish"))
+
+
+
+Fishway_GF_small<-Fishway_incidentals %>% 
+         group_by(Year) %>% 
+         summarise(Count = sum(Quantity))
+
+##plot of fishway catch with abundance of >25cm and <25cm fish 
+
+fishway_GF_big$Year <- as.numeric(fishway_GF_big$Year)
+Fishway_GF_small$Year <- as.numeric(Fishway_GF_small$Year)
+
+
+
+
+RBG_GF_removal$Location<-as.factor(RBG_GF_removal$Location)
+#add a new column to removals to sum and just plot one line for removals
+total_removal_per_year <- RBG_GF_removal %>%
+  group_by(Year) %>%
+  summarise(Count = sum(Count, na.rm = TRUE)) %>%
+  mutate(Source="Removals")
+#add removals name
+
+
+fishway_GF_big <- fishway_GF_big %>%
+  mutate(Source = "Fishway catch")
+
+combined_plot <- ggplot() +
+  geom_line(data = fishway_GF_big, aes(x = Year, y = Count, color=Source), linewidth=1.5) +
+  geom_line(data=total_removal_per_year, aes(x=Year, y=Count, color = Source), linewidth=1.5)+
+  theme_minimal() +
+  labs(title = "Fishway", x = "Year", y = "Count")+
+  theme(legend.title=element_blank(),
+         axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14), 
+    legend.text = element_text(size=14))
+
+
+
+
+#add in the fishway removals to the figure above
+RBG_GF_fishway_removals<-dplyr::filter(RBG_GF_removal, Location %in% c("Fishway"))
+
+fishway_GF_big<-RBG_GF_fishway %>% 
+         group_by(Year) %>% 
+         summarise(Count = sum(Quantity))
+
+
+
+
+
+
+
+
+###################length frequency###################
+###efishing data
+##efish weight/length by year to see if sizes/cohorts have changed overtime
+
+efish_lengthweight<-merge(Efishing_HH_LengthWeights_Feb2024, Spdeets, by="Species")
+
+GF_LW<-dplyr::filter(efish_lengthweight, Common_Name %in% c("Goldfish"))
+unique(GF_LW$Location)
+
+#add in a column for the year 
+GF_LW$year <- format(as.Date(GF_LW$Date, format = "%m/%d/%Y"), "%Y")
+
+#two errors
+GF_LW[1255, 12] <- 307
+GF_LW[727, 12] <- 302
+GF_LW13 <- filter(GF_LW,year==2013)
+
+GF_LW13 %<>% mutate(lcat10=lencat(tl,w=10))
+
+GF_LW13%<>%mutate(lcat10=lencat(Length, w=10))
+(GFFreq<- xtabs(~lcat10, data=GF_LW13))
+lcat10
+hist(~Length, data=GF_LW13, 
+     xlab="fork length mm")
+
+
+#chi square test to see if differences in length distributions differ among years
+GF_all_efish <- GF_LW %>%
+  dplyr::select(1,3:4,12,39)
+#remove data from earlier years, not enough and just inlude any sampling from 2006 onwards
+GF_all_efish_2006 <- dplyr::filter(GF_all_efish, year >=2006)
+
+GF_all_efish_2006%<>%mutate(lcat10=lencat(Length, w=100))
+
+contingency_table<-table(GF_all_efish_2006$year, GF_all_efish_2006$lcat10)
+chi_test_efish_gf<-fisher.test(contingency_table)
+
+#kruskal wallis test
+GF_all_efish_2006$year<-as.factor(GF_all_efish_2006$year)
+GF_all_efish_2006 <- na.omit(GF_all_efish_2006[, c("length", "year")])
+
+KWtest<-kruskal.test(Length~year, data=GF_all_efish_2006)
+
+# Post-hoc pairwise comparisons using Wilcoxon test with Bonferroni correction
+pairwise_comparisons <- pairwise.wilcox.test(GF_all_efish_2006$Length, GF_all_efish_2006$year, p.adjust.method = "holm")
+
+
+pval_matrix <- as.matrix(pairwise_comparisons$p.value)
+pval_vector <- as.vector(pval_matrix)
+
+# Name each comparison with a single hyphen between years (e.g., "1996-1997")
+names(pval_vector) <- as.vector(outer(rownames(pval_matrix), colnames(pval_matrix), paste, sep = "-"))
+
+# Remove NA values (non-comparisons)
+pval_vector <- pval_vector[!is.na(pval_vector)]
+
+# Generate CLD letters based on p-values
+cld <- multcompLetters(pval_vector)$Letters
+cld
+
+cld_df <- data.frame(Year = names(cld), Letters = cld)
+
+
+
+
+# View pairwise comparison results
+pairwise_comparisons
+y_max <- max(GF_all_efish_2006$Length, na.rm = TRUE) + 10
+
+p <- ggplot(GF_all_efish_2006, aes(x = as.factor(year), y = Length)) +
+  geom_boxplot() +
+  geom_text(data = cld_df, 
+            aes(x = Year, y = y_max, label = Letters), 
+            color = "blue", vjust = 0) +
+  labs(x = "Year", y = "Length") +
+  coord_cartesian(ylim = c(0, y_max + 10)) +  # Adjust y-axis range
+  theme_minimal()
+
+p
+
+##RBG data fishway catch data
+
+RBG_GF_fishway<-dplyr::filter(RBG_BarrierData_1996_2023, Species %in% c("Goldfish"))
+colnames(RBG_GF_fishway)
+
+RBG_GF_fishway_noNA <- RBG_GF_fishway[!is.na(RBG_GF_fishway$`Length (mm)`), ]
+RBG_GF_fishway_noNA$year <- format(as.Date(RBG_GF_fishway_noNA$Date, format = "%m/%d/%Y"), "%Y")
+colnames(RBG_GF_fishway_noNA)
+RBG_GF_fishway_noNA_2006 <- dplyr::filter(RBG_GF_fishway_noNA, Year >=2006)
+
+RBG_GF_fishway_noNA%<>%mutate(lcat10=lencat(`Length (mm)`, w=50))
+contingency_table_RBG<-table(RBG_GF_fishway_noNA$Year, RBG_GF_fishway_noNA$lcat10)
+
+KWtest_fishway<-kruskal.test(`Length (mm)`~ Year, data=RBG_GF_fishway_noNA)
+
+# Post-hoc pairwise comparisons using Wilcoxon test with Bonferroni correction
+pairwise_comparisons_RBG <- pairwise.wilcox.test(RBG_GF_fishway_noNA$`Length (mm)`, RBG_GF_fishway_noNA$Year, p.adjust.method = "holm")
+
+pvals <- as.vector(pairwise_comparisons_RBG$p.value)
+names(pvals) <- as.character(outer(rownames(pairwise_comparisons_RBG$p.value), 
+                                   colnames(pairwise_comparisons_RBG$p.value), 
+                                   paste, sep = "-"))[!is.na(pvals)]
+
+# Generate CLD letters
+# Extract and flatten the p-value matrix
+pval_matrix <- as.matrix(pairwise_comparisons_RBG$p.value)
+pval_vector <- as.vector(pval_matrix)
+
+# Name each comparison with a single hyphen between years (e.g., "1996-1997")
+names(pval_vector) <- as.vector(outer(rownames(pval_matrix), colnames(pval_matrix), paste, sep = "-"))
+
+# Remove NA values (non-comparisons)
+pval_vector <- pval_vector[!is.na(pval_vector)]
+cld <- multcompLetters(pval_vector)$Letters
+cld
+cld_df <- data.frame(Year = names(cld), Letters = cld)
+
+
+ggplot(RBG_GF_fishway_noNA, aes(x = as.factor(Year), y = `Length (mm)`)) +
+  geom_boxplot() +
+  geom_text(data = cld_df, aes(x = Year, y = max(RBG_GF_fishway_noNA$`Length (mm)`) + 5, 
+                               label = Letters),
+            color = "blue", vjust = 0) +
+  labs(x = "Year", y = "Length (mm)") +
+  theme_minimal()
+#test between two groupings of years can use a Kolmogorov-Smirnov test
+
+
+
+

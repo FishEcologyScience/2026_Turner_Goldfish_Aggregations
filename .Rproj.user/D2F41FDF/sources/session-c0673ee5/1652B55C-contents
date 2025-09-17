@@ -1,0 +1,310 @@
+## pull out each indiviual within the carrolls bay groupings within the timeframe we noted aggregations
+#check individual receivers to see if we can see more clearly specific areas
+#this will also clear up the issue with them being at the fishway 
+
+#March 15th - May 31st 2022
+## look at plotting the daily receiver location data for carrolls bay 
+
+#rec_props2022_2024
+
+write.csv(New_bindedproportions1, "rec_props2022-2024_updated.csv")
+
+setwd("U:/Goldfish_Telem_Jan25/Telem2025/HH_goldfish")
+
+
+
+
+library(dplyr)
+
+daily_location <- goldfish204_2 %>%
+  group_by(animal_id, date, station) %>%
+  summarise(n = n(), .groups = "drop") %>%  # Count occurrences
+  arrange(animal_id, date, desc(n)) %>%  # Sort by highest count per group
+  group_by(animal_id, date) %>%
+  slice(1) %>%  # Keep the station with the highest count
+  ungroup() %>%
+  select(animal_id, date, station)
+
+print(daily_location)
+
+#Create a sequence of all dates for each individual
+full_dates <- daily_location %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+  dplyr::select(animal_id, date)
+
+#Merge full dates with daily location data and carry forward the last known location
+final_locations <- full_dates %>%
+  left_join(daily_location, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+  mutate(station = zoo::na.locf(station, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+
+#data with all carried forward locatoins= final_locations
+
+#daily proportional activity
+
+library(dplyr)
+#Count the total number of individuals detected per day
+total_per_day <- final_locations %>%
+  group_by(date) %>%
+  summarise(total_individuals = n_distinct(animal_id))
+
+#Count the number of individuals detected at each receiver per day
+count_per_receiver <- final_locations %>%
+  group_by(date, rec_group_adjusted_new) %>%
+  summarise(individuals_at_receiver = n_distinct(animal_id)) %>%
+  ungroup()
+
+#Join the two dataframes and calculate the proportion
+proportions <- count_per_receiver %>%
+  left_join(total_per_day, by = "date") %>%
+  mutate(proportion = (individuals_at_receiver / total_individuals)*100)
+
+# View the result
+print(proportions)
+
+#this dataframe proportions has daily proportioanl activity 
+
+#adding daily depth to the dataframe of proportional activity?
+
+daily_depth <- goldfish204_2 %>%
+  group_by(animal_id, date) %>%
+  summarise(avg_depth = mean(Sensor.Val, na.rm = TRUE), .groups = "drop")
+
+#now bind this with the other dataframe
+library(dplyr)
+
+
+#Create a sequence of all dates for each individual
+full_dates_depth <- daily_depth %>%
+  group_by(animal_id) %>%
+  complete(date = seq(min(date), max(date), by = "day")) %>%  # Fill in missing dates
+  ungroup()%>% 
+  dplyr::select(animal_id, date)
+
+#Merge full dates with daily avg depth data and carry forward the last known avg depth if not one avalibale
+final_locations_depth <- full_dates_depth %>%
+  left_join(daily_depth, by = c("animal_id", "date")) %>%
+  group_by(animal_id) %>%
+  arrange(date) %>%
+   mutate(avg_depth = zoo::na.locf(avg_depth, na.rm = FALSE)) %>%  # Carry forward the last known location
+  ungroup()
+final_locations_depth
+#merge these two dataframes 
+
+# Merging avg_depth into final_locations
+final_locations_withavgdepth <- final_locations %>%
+  left_join(final_locations_depth %>% select(animal_id, date, avg_depth), by = c("animal_id", "date"))
+
+# Step 1: Summarize avg daily depth by date
+daily_avg_depth <- final_locations_depth %>%
+  group_by(date) %>%
+  summarise(avg_daily_depth = mean(avg_depth, na.rm = TRUE))  # Get mean depth per date
+
+# Step 2: Join with proportions dataframe
+final_df <- proportions %>%
+  left_join(daily_avg_depth, by = "date")
+
+##now take the proprotions dataframe and add the avg depth to it based on the date and rec group
+proportions
+
+write.csv(final_df, "dailyprops_indrecs_alldata_plusavgdepth.csv")
+
+props<-read.csv("dailyprops_indrecs_alldata_plusavgdepth.csv")
+#just filter this data for 2022 targeted aggregation at specific carrols bay receviers
+head(props)
+
+proportions_Spring2022 <- props %>%
+  filter(date >= as.Date("2022-03-15") & date <= as.Date("2022-05-01"))
+
+
+proportions_spring2022_carrollsbay <- proportions_Spring2022 %>%
+  filter(station %in% c("HAM-070", "HAM-071", "HAM-063", "HAM-032", "HAM-043", "HAM-029"))
+
+
+#plot it all to jsut look at it first 
+
+library(ggplot2)
+library(plotly)
+
+p <- ggplot(proportions_spring2022_carrollsbay, aes(x = date, y = avg_daily_depth, 
+                                                    color = station, size = proportion)) +
+  # Add a shaded rectangle for depths ≤2m
+  annotate("rect", xmin = min(proportions_spring2022_carrollsbay$date), 
+           xmax = max(proportions_spring2022_carrollsbay$date), 
+           ymin = 0, ymax = 2, fill = "darkgray", alpha = 0.4) +
+  
+  # Scatterplot of depth points with proportional bubble sizes
+  geom_point(alpha = 0.5) +  
+  scale_y_reverse() +  # Reverse y-axis so surface is at the top
+  
+  # Ensure bubble size is proportional
+  scale_size_continuous(range = c(1, 10), guide = guide_legend(title = "Proportion")) + 
+  
+  # Color scale for stations
+  scale_color_manual(values = rainbow(length(unique(proportions_spring2022_carrollsbay$station)))) +  
+ 
+  # Minimal theme with readable axis labels
+  theme_minimal() +
+  
+  # Labels
+  labs(
+    title = "Depth Over Time by Receiver Group",
+    x = "Date",
+    y = "Depth (m)",
+    color = "Receiver Group",
+    size = "Proportion"
+  ) +
+  
+  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Convert to an interactive Plotly plot
+library(plotly)
+ggplotly(p)
+
+plotly_plot <- ggplotly(p)
+
+ggsave("GFCarrolls_spring2022.png", plot = p, width = 8, height = 6, dpi = 300)
+
+
+###2023
+
+unique(props$station)
+proportions_Spring2023 <- props %>%
+  filter(date >= as.Date("2023-03-15") & date <= as.Date("2023-05-01"))
+
+unique(proportions_Spring2023$station)
+
+proportions_Spring2023 <- proportions_Spring2023 %>%
+  filter(station %in% c("HAM-070", "HAM-071", "HAM-063", "HAM-032", "HAM-043", "HAM-029"))
+
+
+#plot it all to jsut look at it first 
+
+library(ggplot2)
+library(plotly)
+
+pp1 <- ggplot(proportions_Spring2023, aes(x = date, y = avg_daily_depth, 
+                                                    color = station, size = proportion)) +
+  # Add a shaded rectangle for depths ≤2m
+  annotate("rect", xmin = min(proportions_Spring2023$date), 
+           xmax = max(proportions_Spring2023$date), 
+           ymin = 0, ymax = 2, fill = "darkgray", alpha = 0.4) +
+  
+  # Scatterplot of depth points with proportional bubble sizes
+  geom_point(alpha = 0.5) +  
+  scale_y_reverse() +  # Reverse y-axis so surface is at the top
+  
+  # Ensure bubble size is proportional
+  scale_size_continuous(range = c(1, 10), guide = guide_legend(title = "Proportion")) + 
+  
+  # Color scale for stations
+  scale_color_manual(values = rainbow(length(unique(proportions_Spring2023$station)))) +  
+ 
+  # Minimal theme with readable axis labels
+  theme_minimal() +
+  
+  # Labels
+  labs(
+    title = "Depth Over Time by Receiver Group",
+    x = "Date",
+    y = "Depth (m)",
+    color = "Receiver Group",
+    size = "Proportion"
+  ) +
+  
+  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+pp1
+
+ggsave("GFCarrolls_spring2023.png", plot = pp1, width = 8, height = 6, dpi = 300)
+
+
+# Convert to an interactive Plotly plot
+library(plotly)
+ggplotly(pp1)
+
+plotly_plot <- ggplotly(p)
+
+
+
+#############
+##2024
+
+unique(props$station)
+proportions_Spring2024 <- props %>%
+  filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-06-30"))
+
+unique(proportions_Spring2024$station)
+
+proportions_Spring2024 <- proportions_Spring2024 %>%
+  filter(station %in% c("HAM-070", "HAM-071", "HAM-063", "HAM-032", "HAM-043", "HAM-029"))
+
+
+#plot it all to jsut look at it first 
+
+library(ggplot2)
+library(plotly)
+
+ppp1 <- ggplot(proportions_Spring2024, aes(x = date, y = avg_daily_depth, 
+                                                    color = station, size = proportion)) +
+  # Add a shaded rectangle for depths ≤2m
+  annotate("rect", xmin = min(proportions_Spring2024$date), 
+           xmax = max(proportions_Spring2024$date), 
+           ymin = 0, ymax = 2, fill = "darkgray", alpha = 0.4) +
+  
+  # Scatterplot of depth points with proportional bubble sizes
+  geom_point(alpha = 0.5) +  
+  scale_y_reverse() +  # Reverse y-axis so surface is at the top
+  
+  # Ensure bubble size is proportional
+  scale_size_continuous(range = c(1, 10), guide = guide_legend(title = "Proportion")) + 
+  
+  # Color scale for stations
+  scale_color_manual(values = rainbow(length(unique(proportions_Spring2024$station)))) +  
+ 
+  # Minimal theme with readable axis labels
+  theme_minimal() +
+  
+  # Labels
+  labs(
+    title = "Depth Over Time by Receiver Group",
+    x = "Date",
+    y = "Depth (m)",
+    color = "Receiver Group",
+    size = "Proportion"
+  ) +
+  
+  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Convert to an interactive Plotly plot
+library(plotly)
+ggplotly(ppp1)
+
+plotly_plot <- ggplotly(p)
+
+
+
+
+
+
+
+
+#data filtering 
+aggregations_props<-proportions_spring2022_carrollsbay %>%
+  filter(proportion >=50)
+
+shallowaggregations <- aggregations_props %>%
+  filter(avg_daily_depth <= 2.0)
+##remake the plots with updated data
+##plot for heat map with recs on the y and date on the x proportional data plotted over time 
+
+desired_order <- c("Cootes Paradise","Bayfront area", "Grindstone", "Carrolls Bay", "West End", "Central", "North shore", "East End")  # Replace with your specific group names
+
+final_locations_withavgdepth_Proprotions$rec_group_adjusted_new <- factor(final_locations_withavgdepth_Proprotions$rec_group_adjusted_new, levels = desired_order)
+
