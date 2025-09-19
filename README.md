@@ -22,3 +22,4 @@ Fieldwork Photos:
 
 Goldfish aggregation removal work 
 
+![Alt text for screen readers](plots/images/Capturegoldfish_1.jpg)
