@@ -395,13 +395,37 @@ ggplot(alldata_clipped1, aes(x = date, y = avg_depth, color = rec_group_adjusted
 
 
 ### targeting aggregations in Carrolls Bay over the month of April 2025
-HH_gcmap <- st_read("/HH_WaterLines_02June2023.shp")
-HH_gcmap <- st_transform(HH_gcmap, crs = 4326)  # Convert to lat/lon if needed
-#
+
+HH_gcmap <- st_read("data/HH_WaterLinesToPoly_21Mar2025.shp")
+
+library(sf)
+library(ggplot2)
+
+
+# Transform CRS
+HH_gcmap <- st_transform(HH_gcmap, crs = 4326)
+
+# Polygonize the linestrings into polygon features
+polygons_sf <- st_polygonize(st_union(HH_gcmap)) |> st_as_sf()
+
+# Plot with fill
+HH1 <- ggplot() +
+  geom_sf(data = polygons_sf, fill = "lightblue", color = "black") +
+  coord_sf(xlim = c(-79.888, -79.875), ylim = c(43.288, 43.299), expand = FALSE) +
+  theme_minimal()
+
+HH1
+
+
+
+
+
 ggplot(HH_gcmap) +
   geom_sf(fill = "lightblue", color = "black", size = 0.5) +
   theme_minimal() +
   theme(axis.text = element_text(size = 8))
+
+st_geometry_type(HH_gcmap)
 
 #GCzoom in 
 x_limits_GC <- c(-79.891, -79.88)  # Define your desired range for x-axis
@@ -411,11 +435,21 @@ y_limits_GC <- c(43.281, 43.291)  # Define your desired range for y-axis
 ################
 # Plot the shapefile with specified x and y limits
 library(ggspatial)
+library(ggplot2)
 library(plotly)
 library(readxl)
 
-CarrollsBay<-ggplot(HH_gcmap) +
-  geom_sf(fill="lightgrey", color="black") +
+
+
+
+
+
+
+
+
+
+CarrollsBay<-ggplot(polygons_sf) +
+  geom_sf(fill="lightblue", color="black") +
   coord_sf(xlim = x_limits_GC, ylim = y_limits_GC) +
   theme_minimal()
 
@@ -423,7 +457,7 @@ plot(HH_gcmap)
 
 plot(CarrollsBay)
 
-#setwd("C:/Users/TURNERN/Documents/For Github/Aggregations-Goldfish-HH")
+setwd("C:/Users/TURNERN/Documents/For Github/Aggregations-Goldfish-HH")
 #add in transect sampling and elevation map
 CB_transects <- st_read("data/GF_FieldPlanning_2025/GF_CarrollsBayTransects_Apr2025.shp")
 CB_boundary<-st_read("data/GF_FieldPlanning_2025/GF_CarrollsZoneBoundaries_Apr2025.shp")
@@ -434,6 +468,15 @@ CB_label<-st_read("data/zonelabel/GF_CarrollsZoneBoundaries_Apr2025Anno.shp")
 #load in aggregations data file and plot on shape file (HH_shapefile code)
 
 Aggdata_June52025 <- read_excel("data/raw/Aggdata_June52025.xlsx")
+
+#Create new column with desired format
+Aggdata_June52025 <- Aggdata_June52025 %>%
+  mutate(
+    Date = as.Date(Date),                   # convert character to Date
+    date_formatted = format(Date, "%d %B")  # create new column
+  )
+
+
 
 #filter out to just show all catch of aggregations so >=5
 
@@ -464,18 +507,20 @@ receiver_colorgroupings <- c(
 #########
 # First, create the first date identifier
 # First, create the first date identifier
-first_date <- min(Aggdata_June52025_onlyaggs$Date)
+
+
+first_date <- min(Aggdata_June52025_onlyaggs$date_formatted)
 
 # Create filtered datasets for first plot only
-first_date_data <- Aggdata_June52025_onlyaggs[Aggdata_June52025_onlyaggs$Date == first_date, ]
+first_date_data <- Aggdata_June52025_onlyaggs[Aggdata_June52025_onlyaggs$date_formatted == first_date, ]
 
 # Add Date column to receiver data so it appears in first facet only
 recs_with_date <- recs2223
-recs_with_date$Date <- first_date
+recs_with_date$date_formatted <- first_date
 
 # Add Date column to labels so they appear in first facet only
-labels_with_date <- CB_label
-labels_with_date$Date <- first_date
+#labels_with_date <- CB_label
+#labels_with_date$Date <- first_date
 
 
 
@@ -488,11 +533,22 @@ summary(recs_with_date$receiver_colorgroupings)
 str(recs_with_date$receiver_colorgroupings)
 
 
+#change date format to match paper 
+library(dplyr)
+
+
+
+
+
+
 
 CarrollsBay3 <- ggplot() +
-  geom_sf(data = HH_gcmap, fill = "lightblue", color = "black", linewidth=2) +
+  geom_sf(data = polygons_sf, fill = "lightblue", color = "black", linewidth=1) +
   geom_sf(data = CB_transects, linewidth = 1, color = "grey30") +
-  geom_sf(data = CB_boundary, fill = alpha("darkolivegreen3", 0.3, linewidth=1)) +
+geom_sf(data = CB_boundary, 
+        fill = alpha("darkolivegreen3", 0.5),  # 0.5 = 50% transparent
+        color = "darkgreen", 
+        linewidth = 1)+
   coord_sf(xlim = x_limits_GC, ylim = y_limits_GC) +
   
   # Labels only on first plot
@@ -527,16 +583,16 @@ CarrollsBay3 <- ggplot() +
              stroke = 0.8) +
     scale_fill_manual(values = receiver_colorgroupings) +
   scale_shape_manual(values = c("2022_Only" = 22, "2023_Only" = 24, "Both_Years" = 21)) +
-  facet_wrap(~Date) +
+  facet_wrap(~date_formatted) +
   
   # Scale bar only on first plot
   annotation_scale(location = "bl", data = first_date_data) +
   
 guides(fill = "none", shape = "none") +
 theme_minimal() +
-theme(axis.text.x = element_text(angle = 35, hjust = 1, size = 12), 
-      axis.text.y = element_text(size = 12),  # Try larger size
-      strip.text = element_text(size = 12),
+theme(axis.text.x = element_text(angle = 35, hjust = 1, size = 13), 
+      axis.text.y = element_text(size = 13),  # Try larger size
+      strip.text = element_text(size = 14), face="bold",
       legend.position = "none")
 
 CarrollsBay3
